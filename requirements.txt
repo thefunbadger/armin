@@ -43,7 +43,7 @@ setuptools>=57.5.0
 six==1.16.0
 smmap==5.0.0
 streamlit==1.25.0
-streamlit-cookies-manager  # Added the required library
+streamlit-cookies-manager
 tenacity==8.2.2
 textblob==0.17.1
 threadpoolctl==3.2.0
@@ -56,3 +56,5 @@ validators==0.20.0
 watchdog==3.0.0
 wheel==0.41.0
 pymongo[srv]==4.6.0
+zeep==5.0.0  # Added the zeep package
+requests==2.31.0  # Already included with version
