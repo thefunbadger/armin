@@ -96,31 +96,6 @@ def get_mongo_collection(collection_name):
     db = client['thefunbadger']  # Replace with your database name
     collection = db[collection_name]  # Dynamic collection name
     return collection
-
-def save_access_token_to_db(token, expires_at, user_id):
-    collection = get_mongo_collection('auth')
-    collection.update_one(
-        {'user_id': user_id},
-        {'$set': {'token': token, 'expires_at': expires_at}},
-        upsert=True
-    )
-
-def get_access_token_from_db(user_id):
-    collection = get_mongo_collection('auth')
-    try:
-        data = collection.find_one({'user_id': user_id})
-        if data:
-            token, expires_at = data['token'], data['expires_at']
-            if datetime.datetime.now() > datetime.datetime.fromisoformat(expires_at):
-                st.error("Token has expired. Please log in again.")
-                return None, None
-            return token, expires_at
-        else:
-            st.warning("No access token found in the database.")
-            return None, None
-    except Exception as e:
-        st.error(f"Error fetching access token from MongoDB: {e}")
-        return None, None
 def save_otp_to_db(phone_number, otp):
     collection = get_mongo_collection('otps')
     collection.update_one(
@@ -141,17 +116,30 @@ def validate_otp(phone_number, otp):
 
 # Function to send OTP via Melipayamak API
 def send_otp(phone_number, otp):
-    url = f"http://rest.payamak-panel.com/api/SendSMS/SendSMS"
+    MELIPAYAMAK_USERNAME = os.getenv('MELIPAYAMAK_USERNAME')
+    MELIPAYAMAK_PASSWORD = os.getenv('MELIPAYAMAK_PASSWORD')
+    sender_number = "50004001654470"  # Replace with your actual sender number
+    
+    url = "https://rest.payamak-panel.com/api/SendSMS/SendSMS"
     payload = {
         'username': MELIPAYAMAK_USERNAME,
         'password': MELIPAYAMAK_PASSWORD,
         'to': phone_number,
-        'from': '50004001654470',  # Replace with your Melipayamak sender number
+        'from': sender_number,
         'text': f'Your OTP is {otp}',
         'isflash': False
     }
-    response = requests.post(url, data=payload)
-    return response.status_code == 200
+    
+    try:
+        response = requests.post(url, data=payload)
+        if response.status_code == 200:
+            return True
+        else:
+            st.error(f"Failed to send OTP. Status Code: {response.status_code}")
+            return False
+    except Exception as e:
+        st.error(f"Error sending OTP: {e}")
+        return False
 
 # OTP Generation
 def generate_otp():
@@ -177,6 +165,32 @@ def otp_login():
             st.session_state["authenticated"] = True
         else:
             st.error("Invalid OTP or OTP expired.")
+
+def save_access_token_to_db(token, expires_at, user_id):
+    collection = get_mongo_collection('auth')
+    collection.update_one(
+        {'user_id': user_id},
+        {'$set': {'token': token, 'expires_at': expires_at}},
+        upsert=True
+    )
+
+def get_access_token_from_db(user_id):
+    collection = get_mongo_collection('auth')
+    try:
+        data = collection.find_one({'user_id': user_id})
+        if data:
+            token, expires_at = data['token'], data['expires_at']
+            if datetime.datetime.now() > datetime.datetime.fromisoformat(expires_at):
+                st.error("Token has expired. Please log in again.")
+                return None, None
+            return token, expires_at
+        else:
+            st.warning("No access token found in the database.")
+            return None, None
+    except Exception as e:
+        st.error(f"Error fetching access token from MongoDB: {e}")
+        return None, None
+
 def save_data_to_db(data_df, user_id):
     collection = get_mongo_collection('data')
     # Convert DataFrame to dictionary records
@@ -656,205 +670,208 @@ def get_post_recommendations(df):
 
 # Main Application Function
 def main():
-    st.title('Ultimate Instagram Analysis Dashboard')
-    
-    if st.button("Clear Cache"):
-        st.cache_data.clear()
-        st.cache_resource.clear()
-        st.experimental_rerun()
+    if 'authenticated' not in st.session_state or not st.session_state['authenticated']:
+        otp_login()
+    else:
+        st.title('Ultimate Instagram Analysis Dashboard')
+        
+        if st.button("Clear Cache"):
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.experimental_rerun()
 
-    # Initialize session state for data caching and error logging
-    if 'data_fetched' not in st.session_state:
-        st.session_state['data_fetched'] = False
-        st.session_state['df'] = pd.DataFrame()
-    if 'api_errors' not in st.session_state:
-        st.session_state['api_errors'] = []
-    if 'user_id' not in st.session_state:
-        st.session_state['user_id'] = 'default_user'  # Replace with actual user identification
+        # Initialize session state for data caching and error logging
+        if 'data_fetched' not in st.session_state:
+            st.session_state['data_fetched'] = False
+            st.session_state['df'] = pd.DataFrame()
+        if 'api_errors' not in st.session_state:
+            st.session_state['api_errors'] = []
+        if 'user_id' not in st.session_state:
+            st.session_state['user_id'] = 'default_user'  # Replace with actual user identification
 
-    user_id = st.session_state['user_id']
+        user_id = st.session_state['user_id']
 
-    # Check for access token in session or MongoDB
-    if 'access_token' not in st.session_state:
-        token_data = get_access_token_from_db(user_id)
+        # Check for access token in session or MongoDB
+        if 'access_token' not in st.session_state:
+            token_data = get_access_token_from_db(user_id)
 
-        if token_data and token_data[0]:
-            st.session_state['access_token'] = token_data[0]
-            st.session_state['expires_at'] = token_data[1]
+            if token_data and token_data[0]:
+                st.session_state['access_token'] = token_data[0]
+                st.session_state['expires_at'] = token_data[1]
 
-            if datetime.datetime.now() > datetime.datetime.fromisoformat(st.session_state['expires_at']):
-                st.error('Access token has expired. Please log in again.')
-                st.session_state.clear()
-                st.experimental_rerun()
+                if datetime.datetime.now() > datetime.datetime.fromisoformat(st.session_state['expires_at']):
+                    st.error('Access token has expired. Please log in again.')
+                    st.session_state.clear()
+                    st.experimental_rerun()
 
-    # If a valid access token exists
-    if 'access_token' in st.session_state and st.session_state['access_token']:
-        if 'expires_at' in st.session_state:
-            if datetime.datetime.now() > datetime.datetime.fromisoformat(st.session_state['expires_at']):
-                st.error('Access token has expired. Please log in again.')
-                st.session_state.clear()
-                st.experimental_rerun()
-            else:
-                st.success('Successfully Authenticated!')
+        # If a valid access token exists
+        if 'access_token' in st.session_state and st.session_state['access_token']:
+            if 'expires_at' in st.session_state:
+                if datetime.datetime.now() > datetime.datetime.fromisoformat(st.session_state['expires_at']):
+                    st.error('Access token has expired. Please log in again.')
+                    st.session_state.clear()
+                    st.experimental_rerun()
+                else:
+                    st.success('Successfully Authenticated!')
 
-                # Load data from DB if not already fetched
-                if not st.session_state['data_fetched']:
-                    with st.spinner('Loading data from database...'):
-                        df = get_data_from_db(user_id)
-                        if not df.empty:
-                            df = calculate_metrics(df)
-                            st.session_state['df'] = df
-                            st.session_state['data_fetched'] = True
-                            st.success('Data loaded from database!')
-                        else:
-                            st.info('No cached data found. Please update data to fetch from API.')
-
-                # Add button to update data
-                if st.button('Update Data') or not st.session_state['data_fetched']:
-                    with st.spinner('Fetching and processing data...'):
-                        # Fetch the list of pages
-                        pages = get_user_pages(st.session_state['access_token'])
-                        if not pages:
-                            st.error("No Facebook Pages found. Ensure your account manages a page connected to Instagram.")
-                            return
-
-                        # Get Instagram Business Account ID
-                        instagram_account_id = None
-                        for page in pages:
-                            page_id = page['id']
-                            page_access_token = page['access_token']
-                            instagram_account_id = get_instagram_account_id(page_id, page_access_token)
-                            if instagram_account_id:
-                                st.session_state['instagram_account_id'] = instagram_account_id
-                                st.session_state['page_access_token'] = page_access_token
-                                break
-
-                        if 'instagram_account_id' in st.session_state:
-                            access_token = st.session_state['page_access_token']
-                            user_instagram_id = st.session_state['instagram_account_id']
-
-                            # Fetch and cache data
-                            df = fetch_all_data(access_token, user_instagram_id)
+                    # Load data from DB if not already fetched
+                    if not st.session_state['data_fetched']:
+                        with st.spinner('Loading data from database...'):
+                            df = get_data_from_db(user_id)
                             if not df.empty:
                                 df = calculate_metrics(df)
                                 st.session_state['df'] = df
                                 st.session_state['data_fetched'] = True
-                                st.success('Data fetched successfully!')
-
-                                # Save the data to MongoDB to persist across sessions
-                                save_data_to_db(df, user_id)
-
-                                # Save the token to MongoDB to persist across sessions
-                                save_access_token_to_db(
-                                    token=st.session_state['access_token'],
-                                    expires_at=st.session_state['expires_at'],
-                                    user_id=user_id
-                                )
+                                st.success('Data loaded from database!')
                             else:
-                                st.warning("No data available to display.")
+                                st.info('No cached data found. Please update data to fetch from API.')
 
-    # Display cached data if available
-    if not st.session_state['df'].empty:
-        df = st.session_state['df']
-        
-        # **Advanced Filtering Section**
-        st.sidebar.header('Filter Options')
-        
-        # Date Range Filter
-        min_date = df['timestamp'].min().date()
-        max_date = df['timestamp'].max().date()
-        start_date, end_date = st.sidebar.date_input('Select Date Range', [min_date, max_date], min_value=min_date, max_value=max_date)
-        
-        # Media Type Filter
-        media_types = df['media_type'].unique().tolist()
-        selected_media_types = st.sidebar.multiselect('Select Media Types', media_types, default=media_types)
-        
-        # Hashtag Filter
-        all_hashtags = df['hashtags'].dropna().str.split(',', expand=True).stack().unique().tolist()
-        selected_hashtags = st.sidebar.multiselect('Select Hashtags', all_hashtags)
-        
-        # Apply Filters
-        filtered_df = df[
-            (df['timestamp'].dt.date >= start_date) &
-            (df['timestamp'].dt.date <= end_date) &
-            (df['media_type'].isin(selected_media_types))
-        ]
-        
-        if selected_hashtags:
-            # Filter rows where any of the selected hashtags are present
-            filtered_df = filtered_df[filtered_df['hashtags'].str.contains('|'.join(selected_hashtags), na=False)]
-        
-        st.write(f"Displaying {len(filtered_df)} out of {len(df)} posts based on selected filters.")
-        
-        # **Visualization and Analysis Using filtered_df**
-        # General Metrics
-        st.header('Key Metrics Visualization')
-        plot_reach_over_time(filtered_df)
-        plot_engagement_over_time(filtered_df)
-        plot_top_posts(filtered_df, metric='reach')
-        plot_top_hashtags(filtered_df)
-        plot_comprehensive_metrics(filtered_df)
-        plot_follower_growth(filtered_df)
-        
-        # **AI Assistance Section**
-        st.header('AI Insights for Selected Post')
-        
-        # Allow user to select a post
-        post_ids = filtered_df['id'].tolist()
-        selected_post_id = st.selectbox('Select a Post ID to Get AI Insights', options=post_ids)
-        
-        selected_post = filtered_df[filtered_df['id'] == selected_post_id].iloc[0]
-        
-        if st.button('Get AI Insight'):
-            with st.spinner('Generating insights...'):
-                insight = ai_insight(selected_post, user_id)
-                st.subheader('AI Analysis:')
-                st.write(insight)
-        
-        # **Recommendations Section**
-        st.header('Recommendations')
-        recommendations = get_recommendations(filtered_df)
-        for rec in recommendations:
-            st.write(f"- {rec}")
+                    # Add button to update data
+                    if st.button('Update Data') or not st.session_state['data_fetched']:
+                        with st.spinner('Fetching and processing data...'):
+                            # Fetch the list of pages
+                            pages = get_user_pages(st.session_state['access_token'])
+                            if not pages:
+                                st.error("No Facebook Pages found. Ensure your account manages a page connected to Instagram.")
+                                return
 
-    # Authentication if token is not present
-    if 'access_token' not in st.session_state:
-        st.header('Login with Facebook')
-        authorization_url = get_facebook_auth_url()
-        st.markdown(f'<a href="{authorization_url}">Login with Facebook</a>', unsafe_allow_html=True)
+                            # Get Instagram Business Account ID
+                            instagram_account_id = None
+                            for page in pages:
+                                page_id = page['id']
+                                page_access_token = page['access_token']
+                                instagram_account_id = get_instagram_account_id(page_id, page_access_token)
+                                if instagram_account_id:
+                                    st.session_state['instagram_account_id'] = instagram_account_id
+                                    st.session_state['page_access_token'] = page_access_token
+                                    break
 
-        # Handle Redirect after Facebook OAuth
-        query_params = st.experimental_get_query_params()
-        if 'code' in query_params:
-            code = query_params['code'][0]
-            token = get_access_token(code)
-            if token:
-                # Exchange for long-lived token
-                long_lived_token, expires_in = exchange_for_long_lived_token(token['access_token'])
-                if long_lived_token:
-                    st.session_state['access_token'] = long_lived_token
-                    st.session_state['expires_at'] = (datetime.datetime.now() + datetime.timedelta(seconds=expires_in)).isoformat()
+                            if 'instagram_account_id' in st.session_state:
+                                access_token = st.session_state['page_access_token']
+                                user_instagram_id = st.session_state['instagram_account_id']
 
-                    # Save the token to MongoDB
-                    save_access_token_to_db(
-                        token=long_lived_token,
-                        expires_at=st.session_state['expires_at'],
-                        user_id=user_id
-                    )
+                                # Fetch and cache data
+                                df = fetch_all_data(access_token, user_instagram_id)
+                                if not df.empty:
+                                    df = calculate_metrics(df)
+                                    st.session_state['df'] = df
+                                    st.session_state['data_fetched'] = True
+                                    st.success('Data fetched successfully!')
 
-                    # Remove code from the URL
-                    st.experimental_set_query_params()  # Clears query params like 'code'
-                    st.experimental_rerun()  # Refresh the app to clean the URL
+                                    # Save the data to MongoDB to persist across sessions
+                                    save_data_to_db(df, user_id)
+
+                                    # Save the token to MongoDB to persist across sessions
+                                    save_access_token_to_db(
+                                        token=st.session_state['access_token'],
+                                        expires_at=st.session_state['expires_at'],
+                                        user_id=user_id
+                                    )
+                                else:
+                                    st.warning("No data available to display.")
+
+        # Display cached data if available
+        if not st.session_state['df'].empty:
+            df = st.session_state['df']
+            
+            # **Advanced Filtering Section**
+            st.sidebar.header('Filter Options')
+            
+            # Date Range Filter
+            min_date = df['timestamp'].min().date()
+            max_date = df['timestamp'].max().date()
+            start_date, end_date = st.sidebar.date_input('Select Date Range', [min_date, max_date], min_value=min_date, max_value=max_date)
+            
+            # Media Type Filter
+            media_types = df['media_type'].unique().tolist()
+            selected_media_types = st.sidebar.multiselect('Select Media Types', media_types, default=media_types)
+            
+            # Hashtag Filter
+            all_hashtags = df['hashtags'].dropna().str.split(',', expand=True).stack().unique().tolist()
+            selected_hashtags = st.sidebar.multiselect('Select Hashtags', all_hashtags)
+            
+            # Apply Filters
+            filtered_df = df[
+                (df['timestamp'].dt.date >= start_date) &
+                (df['timestamp'].dt.date <= end_date) &
+                (df['media_type'].isin(selected_media_types))
+            ]
+            
+            if selected_hashtags:
+                # Filter rows where any of the selected hashtags are present
+                filtered_df = filtered_df[filtered_df['hashtags'].str.contains('|'.join(selected_hashtags), na=False)]
+            
+            st.write(f"Displaying {len(filtered_df)} out of {len(df)} posts based on selected filters.")
+            
+            # **Visualization and Analysis Using filtered_df**
+            # General Metrics
+            st.header('Key Metrics Visualization')
+            plot_reach_over_time(filtered_df)
+            plot_engagement_over_time(filtered_df)
+            plot_top_posts(filtered_df, metric='reach')
+            plot_top_hashtags(filtered_df)
+            plot_comprehensive_metrics(filtered_df)
+            plot_follower_growth(filtered_df)
+            
+            # **AI Assistance Section**
+            st.header('AI Insights for Selected Post')
+            
+            # Allow user to select a post
+            post_ids = filtered_df['id'].tolist()
+            selected_post_id = st.selectbox('Select a Post ID to Get AI Insights', options=post_ids)
+            
+            selected_post = filtered_df[filtered_df['id'] == selected_post_id].iloc[0]
+            
+            if st.button('Get AI Insight'):
+                with st.spinner('Generating insights...'):
+                    insight = ai_insight(selected_post, user_id)
+                    st.subheader('AI Analysis:')
+                    st.write(insight)
+            
+            # **Recommendations Section**
+            st.header('Recommendations')
+            recommendations = get_recommendations(filtered_df)
+            for rec in recommendations:
+                st.write(f"- {rec}")
+
+        # Authentication if token is not present
+        if 'access_token' not in st.session_state:
+            st.header('Login with Facebook')
+            authorization_url = get_facebook_auth_url()
+            st.markdown(f'<a href="{authorization_url}">Login with Facebook</a>', unsafe_allow_html=True)
+
+            # Handle Redirect after Facebook OAuth
+            query_params = st.experimental_get_query_params()
+            if 'code' in query_params:
+                code = query_params['code'][0]
+                token = get_access_token(code)
+                if token:
+                    # Exchange for long-lived token
+                    long_lived_token, expires_in = exchange_for_long_lived_token(token['access_token'])
+                    if long_lived_token:
+                        st.session_state['access_token'] = long_lived_token
+                        st.session_state['expires_at'] = (datetime.datetime.now() + datetime.timedelta(seconds=expires_in)).isoformat()
+
+                        # Save the token to MongoDB
+                        save_access_token_to_db(
+                            token=long_lived_token,
+                            expires_at=st.session_state['expires_at'],
+                            user_id=user_id
+                        )
+
+                        # Remove code from the URL
+                        st.experimental_set_query_params()  # Clears query params like 'code'
+                        st.experimental_rerun()  # Refresh the app to clean the URL
+                    else:
+                        st.session_state['api_errors'].append('Failed to obtain a long-lived access token.')
                 else:
-                    st.session_state['api_errors'].append('Failed to obtain a long-lived access token.')
-            else:
-                st.session_state['api_errors'].append('Failed to retrieve access token.')
+                    st.session_state['api_errors'].append('Failed to retrieve access token.')
 
-    # Optional: Display API Errors for Debugging (Hidden by Default)
-    if st.session_state['api_errors']:
-        with st.expander("View API Errors"):
-            for error in st.session_state['api_errors']:
-                st.write(error)
+        # Optional: Display API Errors for Debugging (Hidden by Default)
+        if st.session_state['api_errors']:
+            with st.expander("View API Errors"):
+                for error in st.session_state['api_errors']:
+                    st.write(error)
 
 if __name__ == '__main__':
     main()
