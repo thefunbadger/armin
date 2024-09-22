@@ -196,6 +196,36 @@ def send_otp(phone_number, otp):
     except requests.exceptions.RequestException as e:
         st.error(f"Error sending OTP: {e}")
     return False
+def send_otp(phone_number, otp, max_retries=3):
+    MELIPAYAMAK_TOKEN = os.getenv('MELIPAYAMAK_TOKEN')
+    sender_number = "50004001654470"  # Replace with your actual sender number
+    
+    url = "https://rest.payamak-panel.com/api/SendSMS/SendSMS"
+    payload = {
+        'api_token': MELIPAYAMAK_TOKEN,
+        'to': phone_number,
+        'from': sender_number,
+        'text': f'Your OTP is {otp}',
+        'isflash': False
+    }
+    
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, data=payload, timeout=10)  # 10 seconds timeout
+            if response.status_code == 200:
+                st.success(f"OTP sent successfully to {phone_number}")
+                return True
+            else:
+                st.error(f"Failed to send OTP. Status Code: {response.status_code}")
+                st.error(f"Response: {response.text}")
+        except requests.exceptions.Timeout:
+            st.warning(f"Request timed out. Retrying... (Attempt {attempt + 1}/{max_retries})")
+        except requests.exceptions.RequestException as e:
+            st.error(f"Error sending OTP: {e}")
+        time.sleep(2 ** attempt)  # Exponential backoff
+    st.error(f"Failed to send OTP after {max_retries} attempts.")
+    return False
+
 
 
 # OTP Generation
