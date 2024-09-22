@@ -1,7 +1,8 @@
 import streamlit as st
 import requests
 import pandas as pd
-import datetime
+from datetime import timezone
+now = datetime.datetime.now(timezone.utc)
 from requests_oauthlib import OAuth2Session
 import warnings
 import os
@@ -9,6 +10,8 @@ from dotenv import load_dotenv
 import plotly.express as px
 from pymongo import MongoClient
 import time
+import random
+
 # Password Protection
 # Load environment variables from .env file (only for local development)
 load_dotenv()
@@ -36,11 +39,15 @@ else:
 
 # Ensure all required environment variables are set
 required_env_vars = ['CLIENT_ID', 'CLIENT_SECRET', 'REDIRECT_URI', 'MONGO_CONNECTION_STRING', 'HF_API_TOKEN']
-missing_vars = [var for var in required_env_vars if (var not in st.secrets and os.getenv(var) is None)]
+missing_vars = [var for var in required_env_vars if not (st.secrets.get(var) or os.getenv(var))]
 if missing_vars:
     st.error(f"Missing environment variables: {', '.join(missing_vars)}. Please set them before running the app.")
     st.stop()
-
+# In your token expiry check, use timezone-aware datetime
+now = datetime.datetime.now(timezone.utc)
+if datetime.datetime.fromisoformat(expires_at) < now:
+    st.error("Token has expired. Please log in again.")
+    return None, None
 # Define Hugging Face API URL for Persian
 HF_API_URL = "https://api-inference.huggingface.co/models/distilgpt2"
 
