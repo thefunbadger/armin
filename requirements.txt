@@ -56,5 +56,3 @@ validators==0.20.0
 watchdog==3.0.0
 wheel==0.41.0
 pymongo[srv]==4.6.0
-zeep==5.0.0  # Added the zeep package
-requests==2.31.0  # Already included with version
