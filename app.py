@@ -1,8 +1,8 @@
 import streamlit as st
 import requests
 import pandas as pd
+import datetime
 from datetime import timezone
-now = datetime.datetime.now(timezone.utc)
 from requests_oauthlib import OAuth2Session
 import warnings
 import os
@@ -12,7 +12,6 @@ from pymongo import MongoClient
 import time
 import random
 
-# Password Protection
 # Load environment variables from .env file (only for local development)
 load_dotenv()
 
@@ -43,11 +42,49 @@ missing_vars = [var for var in required_env_vars if not (st.secrets.get(var) or 
 if missing_vars:
     st.error(f"Missing environment variables: {', '.join(missing_vars)}. Please set them before running the app.")
     st.stop()
-# In your token expiry check, use timezone-aware datetime
-now = datetime.datetime.now(timezone.utc)
-if datetime.datetime.fromisoformat(expires_at) < now:
-    st.error("Token has expired. Please log in again.")
-    return None, None
+
+# Token expiry check function - moved return None, None inside the function
+def check_token_expiry(expires_at):
+    now = datetime.datetime.now(timezone.utc)
+    if datetime.datetime.fromisoformat(expires_at) < now:
+        st.error("Token has expired. Please log in again.")
+        return None, None
+    return True  # Token is valid
+
+# MongoDB Helper Functions
+def get_mongo_client():
+    return MongoClient(MONGO_CONNECTION_STRING)
+
+def get_mongo_collection(collection_name):
+    client = get_mongo_client()
+    db = client['thefunbadger']  # Replace with your database name
+    collection = db[collection_name]  # Dynamic collection name
+    return collection
+
+def save_access_token_to_db(token, expires_at, user_id):
+    collection = get_mongo_collection('auth')
+    collection.update_one(
+        {'user_id': user_id},
+        {'$set': {'token': token, 'expires_at': expires_at}},
+        upsert=True
+    )
+
+def get_access_token_from_db(user_id):
+    collection = get_mongo_collection('auth')
+    try:
+        data = collection.find_one({'user_id': user_id})
+        if data:
+            token, expires_at = data['token'], data['expires_at']
+            if check_token_expiry(expires_at):
+                return token, expires_at
+            else:
+                return None, None
+        else:
+            st.warning("No access token found in the database.")
+            return None, None
+    except Exception as e:
+        st.error(f"Error fetching access token from MongoDB: {e}")
+        return None, None
 # Define Hugging Face API URL for Persian
 HF_API_URL = "https://api-inference.huggingface.co/models/distilgpt2"
 
