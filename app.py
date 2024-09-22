@@ -167,21 +167,21 @@ def validate_otp(phone_number, otp):
     return False
 
 # Function to send OTP via Melipayamak API
+# Function to send OTP using Melipayamak Pattern API
 def send_otp(phone_number, otp):
-    MELIPAYAMAK_USERNAME = os.getenv('MELIPAYAMAK_USERNAME')
-    MELIPAYAMAK_PASSWORD = os.getenv('MELIPAYAMAK_PASSWORD')
-    sender_number = "50004001654470"  # Replace with your actual sender number
+    MELIPAYAMAK_API_KEY = os.getenv('MELIPAYAMAK_API_KEY')  # Use your API key for Melipayamak
+    pattern_code = "245371"  # Replace with your pattern code from Melipayamak
     
-    url = "https://rest.payamak-panel.com/api/SendSMS/SendSMS"
+    url = "https://rest.payamak-panel.com/api/SendPattern/SendPattern"
     payload = {
-        'username': MELIPAYAMAK_USERNAME,
-        'password': MELIPAYAMAK_PASSWORD,
+        'username': MELIPAYAMAK_USERNAME,  # Melipayamak username
+        'password': MELIPAYAMAK_PASSWORD,  # Melipayamak password
         'to': phone_number,
-        'from': sender_number,
-        'text': f'Your OTP is {otp}',
-        'isflash': False
+        'from': "50004001654470",  # Replace with your actual sender number
+        'patternCode': pattern_code,  # The pattern code you created
+        'inputData': json.dumps([{'code': otp}])  # The data to replace in the pattern
     }
-    
+
     try:
         response = requests.post(url, data=payload, timeout=10)  # 10 seconds timeout
         if response.status_code == 200:
@@ -196,35 +196,7 @@ def send_otp(phone_number, otp):
     except requests.exceptions.RequestException as e:
         st.error(f"Error sending OTP: {e}")
     return False
-def send_otp(phone_number, otp, max_retries=3):
-    MELIPAYAMAK_TOKEN = os.getenv('MELIPAYAMAK_TOKEN')
-    sender_number = "50004001654470"  # Replace with your actual sender number
-    
-    url = "https://rest.payamak-panel.com/api/SendSMS/SendSMS"
-    payload = {
-        'api_token': MELIPAYAMAK_TOKEN,
-        'to': phone_number,
-        'from': sender_number,
-        'text': f'Your OTP is {otp}',
-        'isflash': False
-    }
-    
-    for attempt in range(max_retries):
-        try:
-            response = requests.post(url, data=payload, timeout=10)  # 10 seconds timeout
-            if response.status_code == 200:
-                st.success(f"OTP sent successfully to {phone_number}")
-                return True
-            else:
-                st.error(f"Failed to send OTP. Status Code: {response.status_code}")
-                st.error(f"Response: {response.text}")
-        except requests.exceptions.Timeout:
-            st.warning(f"Request timed out. Retrying... (Attempt {attempt + 1}/{max_retries})")
-        except requests.exceptions.RequestException as e:
-            st.error(f"Error sending OTP: {e}")
-        time.sleep(2 ** attempt)  # Exponential backoff
-    st.error(f"Failed to send OTP after {max_retries} attempts.")
-    return False
+
 
 
 
