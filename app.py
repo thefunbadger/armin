@@ -42,7 +42,14 @@ missing_vars = [var for var in required_env_vars if not (st.secrets.get(var) or 
 if missing_vars:
     st.error(f"Missing environment variables: {', '.join(missing_vars)}. Please set them before running the app.")
     st.stop()
-
+def check_env_vars():
+    MELIPAYAMAK_USERNAME = os.getenv('MELIPAYAMAK_USERNAME')
+    MELIPAYAMAK_PASSWORD = os.getenv('MELIPAYAMAK_PASSWORD')
+    
+    if not MELIPAYAMAK_USERNAME or not MELIPAYAMAK_PASSWORD:
+        st.error("Melipayamak credentials are not set correctly. Please check your environment variables.")
+        return False
+    return True
 # Token expiry check function - moved return None, None inside the function
 def check_token_expiry(expires_at):
     now = datetime.datetime.now(timezone.utc)
@@ -133,6 +140,14 @@ def get_mongo_collection(collection_name):
     db = client['thefunbadger']  # Replace with your database name
     collection = db[collection_name]  # Dynamic collection name
     return collection
+def format_phone_number(phone_number):
+    # Ensure the phone number starts with +98 (Iranian format)
+    if phone_number.startswith('0'):
+        phone_number = '+98' + phone_number[1:]  # Replace leading 0 with +98
+    elif not phone_number.startswith('+98'):
+        phone_number = '+98' + phone_number
+    return phone_number
+
 def save_otp_to_db(phone_number, otp):
     collection = get_mongo_collection('otps')
     collection.update_one(
@@ -170,9 +185,11 @@ def send_otp(phone_number, otp):
     try:
         response = requests.post(url, data=payload)
         if response.status_code == 200:
+            st.success(f"OTP sent successfully to {phone_number}")
             return True
         else:
             st.error(f"Failed to send OTP. Status Code: {response.status_code}")
+            st.error(f"Response: {response.text}")
             return False
     except Exception as e:
         st.error(f"Error sending OTP: {e}")
@@ -188,6 +205,7 @@ def otp_login():
 
     phone_number = st.text_input("Enter your phone number")
     if st.button("Send OTP"):
+        phone_number = format_phone_number(phone_number)
         otp = generate_otp()
         if send_otp(phone_number, otp):
             save_otp_to_db(phone_number, otp)
@@ -197,11 +215,13 @@ def otp_login():
 
     otp_input = st.text_input("Enter the OTP")
     if st.button("Verify OTP"):
+        phone_number = format_phone_number(phone_number)
         if validate_otp(phone_number, otp_input):
             st.success("OTP verified successfully. You are logged in!")
             st.session_state["authenticated"] = True
         else:
             st.error("Invalid OTP or OTP expired.")
+
 
 def save_access_token_to_db(token, expires_at, user_id):
     collection = get_mongo_collection('auth')
