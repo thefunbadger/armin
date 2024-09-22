@@ -11,6 +11,7 @@ import plotly.express as px
 from pymongo import MongoClient
 import time
 import random
+import json
 
 # Load environment variables from .env file (only for local development)
 load_dotenv()
@@ -166,7 +167,8 @@ def validate_otp(phone_number, otp):
             return True
     return False
 
-# Function to send OTP via Melipayamak API
+import json
+
 # Function to send OTP using Melipayamak Pattern API
 def send_otp(phone_number, otp):
     MELIPAYAMAK_API_KEY = os.getenv('MELIPAYAMAK_API_KEY')  # Use your API key for Melipayamak
@@ -183,7 +185,8 @@ def send_otp(phone_number, otp):
     }
 
     try:
-        response = requests.post(url, data=payload, timeout=10)  # 10 seconds timeout
+        # Increase timeout duration
+        response = requests.post(url, data=payload, timeout=30)  # 30 seconds timeout
         if response.status_code == 200:
             st.success(f"OTP sent successfully to {phone_number}")
             return True
@@ -196,6 +199,7 @@ def send_otp(phone_number, otp):
     except requests.exceptions.RequestException as e:
         st.error(f"Error sending OTP: {e}")
     return False
+
 
 
 
