@@ -183,7 +183,7 @@ def send_otp(phone_number, otp):
     }
     
     try:
-        response = requests.post(url, data=payload)
+        response = requests.post(url, data=payload, timeout=10)  # 10 seconds timeout
         if response.status_code == 200:
             st.success(f"OTP sent successfully to {phone_number}")
             return True
@@ -191,9 +191,12 @@ def send_otp(phone_number, otp):
             st.error(f"Failed to send OTP. Status Code: {response.status_code}")
             st.error(f"Response: {response.text}")
             return False
-    except Exception as e:
+    except requests.exceptions.Timeout:
+        st.error("Request timed out. Please try again later.")
+    except requests.exceptions.RequestException as e:
         st.error(f"Error sending OTP: {e}")
-        return False
+    return False
+
 
 # OTP Generation
 def generate_otp():
