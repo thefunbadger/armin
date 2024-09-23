@@ -116,9 +116,11 @@ class MongoDBHelper:
 
 
 def get_mongo_collection(collection_name):
-    # Use the MongoDBHelper instance instead of calling undefined get_mongo_client()
+    # No need for get_mongo_client(), use mongo_helper to access MongoDB collections
     return mongo_helper.get_collection(collection_name)
 
+
+# Initialize the MongoDBHelper with your connection string and database
 mongo_helper = MongoDBHelper(MONGO_CONNECTION_STRING, 'thefunbadger')
 
 def save_access_token_to_db(token, expires_at, user_id):
@@ -126,7 +128,8 @@ def save_access_token_to_db(token, expires_at, user_id):
 
 
 def get_access_token_from_db(user_id):
-    collection = get_mongo_collection('auth')
+    # Use mongo_helper to get the 'auth' collection
+    collection = mongo_helper.get_collection('auth')
     try:
         data = collection.find_one({'user_id': user_id})
         if data:
@@ -141,6 +144,8 @@ def get_access_token_from_db(user_id):
     except Exception as e:
         st.error(f"Error fetching access token from MongoDB: {e}")
         return None, None
+
+
 
 def save_data_to_db(data_df, user_id):
     collection = get_mongo_collection('data')
