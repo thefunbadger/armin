@@ -262,6 +262,8 @@ def get_media(access_token, instagram_account_id):
         response = requests.get(url)
         if response.status_code == 200:
             json_response = response.json()
+            st.write(json_response)
+
             media.extend(json_response.get('data', []))
             url = json_response.get('paging', {}).get('next', '')
         else:
@@ -279,6 +281,9 @@ def get_media_insights(access_token, media_id, media_type):
         metrics_str = ','.join(metrics)
         url = f"https://graph.facebook.com/v20.0/{media_id}/insights?metric={metrics_str}&access_token={access_token}"
         response = requests.get(url)
+        if response.status_code == 200:
+            json_response = response.json()
+            st.write(json_response)
 
         if response.status_code == 200:
             return response.json().get('data', [])
@@ -301,7 +306,10 @@ def fetch_all_data(access_token, instagram_account_id):
         media_id = item['id']
         media_type = item['media_type']
 
+        # Fetch insights and log the data
         insights = get_media_insights(access_token, media_id, media_type)
+        st.write(insights)  # Log insights to see what is missing
+
         data = {
             'id': media_id,
             'caption': item.get('caption', ''),
@@ -334,7 +342,9 @@ def fetch_all_data(access_token, instagram_account_id):
         st.session_state['api_errors'].append("No insights data fetched. Please check API permissions and Instagram Business account setup.")
 
     df = pd.DataFrame(all_data)
+    st.write(df)  # Log final data before processing
     return df
+
 
 def extract_hashtags(caption):
     hashtags = [tag.strip('#') for tag in caption.split() if tag.startswith('#')]
@@ -389,18 +399,47 @@ import numpy as np
 from scipy.signal import savgol_filter  # For smoothing lines
 
 def plot_reach_over_time(df):
-    if 'reach' in df.columns and not df['reach'].isnull().all():
-        df = df.sort_values(by='timestamp')
-        reach_smoothed = savgol_filter(df['reach'], window_length=7, polyorder=2)  # Smooth the line
-        
-        fig = px.line(df, x='timestamp', y=reach_smoothed, title='Reach Over Time', 
-                      labels={'timestamp': 'Date', 'reach': 'Reach'}, 
-                      template='plotly_dark')
-        fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))  # Improved clarity with markers
-        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
-        return fig
-    else:
+    """
+    Plot Reach Over Time for the given DataFrame.
+    Handles missing or incomplete data and applies a smoothing filter for better visualization.
+    
+    :param df: DataFrame containing 'reach' and 'timestamp' columns.
+    :return: Plotly figure or None if data is insufficient.
+    """
+    if 'reach' not in df.columns or df['reach'].isnull().all():
         st.warning("Reach data is missing or incomplete. Unable to plot reach over time.")
+        return None
+
+    try:
+        # Ensure data is sorted by timestamp and non-null
+        df = df.sort_values(by='timestamp').dropna(subset=['reach', 'timestamp'])
+        
+        if df.empty:
+            st.warning("Reach data is empty after cleaning. Unable to plot.")
+            return None
+
+        # Apply smoothing filter (you can adjust the window_length and polyorder for more/less smoothing)
+        window_length = min(7, len(df))  # Ensure the window length is smaller than the dataset
+        if window_length < 3:
+            st.warning("Not enough data points to apply smoothing. Displaying raw data.")
+            reach_smoothed = df['reach']
+        else:
+            reach_smoothed = savgol_filter(df['reach'], window_length=window_length, polyorder=2)
+
+        # Create the Plotly line chart
+        fig = px.line(df, x='timestamp', y=reach_smoothed, 
+                      title='Reach Over Time', 
+                      labels={'timestamp': 'Date', 'reach': 'Reach'},
+                      template='plotly_dark')
+
+        # Update chart aesthetics
+        fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
+        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
+
+        return fig
+    
+    except Exception as e:
+        st.error(f"Error plotting reach over time: {e}")
         return None
 
 
@@ -587,7 +626,8 @@ def compare_performance(df, access_token):
                 'impressions': df['impressions'].mean(),
                 'engagement_rate': df['engagement_rate'].mean()
             }
-            competitors_df = competitors_df.append(user_metrics, ignore_index=True)
+            competitors_df = pd.concat([competitors_df, pd.DataFrame([user_metrics])], ignore_index=True)
+
             
             for metric in ['reach', 'impressions', 'engagement_rate']:
                 if metric in competitors_df.columns:
@@ -601,7 +641,7 @@ def compare_performance(df, access_token):
         else:
             st.warning("No competitor data available.")
     else:
-        st.info("Enter competitor Instagram Account IDs to compare performance.")
+        st.info("Enter competitor Instagram Account IDs as comma-separated values without the @ symbol.")
 def calculate_engagement_rate(df):
     if 'likes' in df.columns and 'comments' in df.columns and 'impressions' in df.columns:
         # Ensure all are numeric values
@@ -817,6 +857,7 @@ def main():
                         with st.spinner('Getting response from AI...'):
                             follow_up_response = query_huggingface(f"Q: {follow_up_question}\nA:", model=ai_model)
                             st.write(f"AI Answer: {follow_up_response}")
+                            st.experimental_rerun() 
 
         # Competitor Benchmarking Tab
         with tabs[3]:
