@@ -5,7 +5,6 @@ import datetime
 from requests_oauthlib import OAuth2Session
 import warnings
 from pymongo import MongoClient
-import time
 import plotly.express as px
 from dotenv import load_dotenv
 import os
@@ -67,17 +66,17 @@ SCOPES = [
 VALID_METRICS = {
     'IMAGE': [
         'impressions', 'reach', 'saved', 'likes', 'comments',
-        'engagement', 'profile_views', 'website_clicks'
+        'profile_views', 'website_clicks'
     ],
     'VIDEO': [
         'plays', 'clips_replays_count', 'ig_reels_video_view_total_time',
         'ig_reels_avg_watch_time', 'video_views', 'saved', 'reach',
-        'likes', 'comments', 'engagement', 'profile_views', 'website_clicks'
+        'likes', 'comments', 'profile_views', 'website_clicks'
     ],
     'REELS': [
         'plays', 'clips_replays_count', 'ig_reels_video_view_total_time',
         'ig_reels_avg_watch_time', 'video_views', 'saved', 'reach',
-        'likes', 'comments', 'engagement', 'profile_views', 'website_clicks'
+        'likes', 'comments', 'profile_views', 'website_clicks'
     ]
 }
 
