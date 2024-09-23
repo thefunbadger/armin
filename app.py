@@ -674,10 +674,10 @@ def main():
     st.title('Ultimate Instagram Analysis Dashboard')
 
     # Button to clear cache
-    if st.button("Clear Cache"):
-        st.cache_data.clear()
-        st.cache_resource.clear()
-        st.experimental_rerun()
+    if st.button("Clear Cache and Rerun"):
+        st.cache_data.clear()  # Clears cache from Streamlit's data functions
+        st.cache_resource.clear()  # Clears cache from resource functions (e.g., database connections)
+        st.experimental_rerun()  # Reruns the script
 
     # Initialize session states
     if 'data_fetched' not in st.session_state:
