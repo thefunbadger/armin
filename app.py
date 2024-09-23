@@ -451,8 +451,197 @@ def compare_performance(df, access_token):
             st.warning("No competitor data available.")
     else:
         st.info("Enter competitor Instagram Account IDs as comma-separated values without the @ symbol.")
+# Visualization Functions with Plotly
+
+def plot_reach_over_time(df):
+    """
+    Plot Reach Over Time for the given DataFrame.
+    Handles missing or incomplete data and applies a smoothing filter for better visualization.
+    
+    :param df: DataFrame containing 'reach' and 'timestamp' columns.
+    :return: Plotly figure or None if data is insufficient.
+    """
+    if 'reach' not in df.columns or df['reach'].isnull().all():
+        st.warning("Reach data is missing or incomplete. Unable to plot reach over time.")
+        return None
+
+    try:
+        # Ensure data is sorted by timestamp and non-null
+        df = df.sort_values(by='timestamp').dropna(subset=['reach', 'timestamp'])
+        
+        if df.empty:
+            st.warning("Reach data is empty after cleaning. Unable to plot.")
+            return None
+
+        # Apply smoothing filter (adjust window_length and polyorder as needed)
+        window_length = min(7, len(df))  # Ensure the window length is smaller than the dataset
+        if window_length < 3:
+            st.warning("Not enough data points to apply smoothing. Displaying raw data.")
+            reach_smoothed = df['reach']
+        else:
+            reach_smoothed = savgol_filter(df['reach'], window_length=window_length, polyorder=2)
+
+        # Create the Plotly line chart
+        fig = px.line(df, x='timestamp', y=reach_smoothed, 
+                      title='Reach Over Time', 
+                      labels={'timestamp': 'Date', 'y': 'Reach'},
+                      template='plotly_dark')
+
+        # Update chart aesthetics
+        fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
+        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
+
+        return fig
+    
+    except Exception as e:
+        st.error(f"Error plotting reach over time: {e}")
+        return None
+
+def plot_engagement(df):
+    """
+    Plot Engagement Rate Over Time.
+    
+    :param df: DataFrame containing 'engagement_rate' and 'timestamp' columns.
+    :return: Plotly figure or None if data is insufficient.
+    """
+    if 'engagement_rate' not in df.columns or df['engagement_rate'].isnull().all():
+        st.warning("Engagement rate data is missing or incomplete.")
+        return None
+
+    try:
+        # Ensure data is sorted by timestamp and non-null
+        df = df.sort_values(by='timestamp').dropna(subset=['engagement_rate', 'timestamp'])
+        
+        if df.empty:
+            st.warning("Engagement rate data is empty after cleaning. Unable to plot.")
+            return None
+
+        # Apply smoothing filter if enough data points
+        window_length = min(7, len(df))
+        if window_length < 3:
+            st.warning("Not enough data points to apply smoothing. Displaying raw data.")
+            engagement_smoothed = df['engagement_rate']
+        else:
+            engagement_smoothed = savgol_filter(df['engagement_rate'], window_length=window_length, polyorder=2)
+
+        # Create the Plotly line chart
+        fig = px.line(df, x='timestamp', y=engagement_smoothed, 
+                      title='Engagement Rate Over Time', 
+                      labels={'timestamp': 'Date', 'y': 'Engagement Rate (%)'},
+                      template='plotly_dark')
+
+        # Update chart aesthetics
+        fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
+        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
+
+        return fig
+    
+    except Exception as e:
+        st.error(f"Error plotting engagement rate over time: {e}")
+        return None
+
+def plot_top_posts(df, metric='reach', top_n=5):
+    """
+    Plot Top N Posts based on a specified metric.
+    
+    :param df: DataFrame containing posts data.
+    :param metric: The metric to sort by (e.g., 'reach', 'impressions').
+    :param top_n: Number of top posts to display.
+    :return: Plotly figure or None if data is insufficient.
+    """
+    if metric not in df.columns or df[metric].isnull().all():
+        st.warning(f"{metric.capitalize()} data is missing or incomplete. Unable to plot top posts by {metric}.")
+        return None
+    top_posts = df.sort_values(by=metric, ascending=False).head(top_n)
+    fig = px.bar(top_posts, x='id', y=metric, title=f'Top {top_n} Posts by {metric.capitalize()}', labels={'id': 'Post ID', metric: metric.capitalize()}, template='plotly_dark')
+    fig.update_layout(xaxis_tickangle=-45)
+    return fig
+
+def plot_top_hashtags(df):
+    """
+    Plot the top hashtags used in posts.
+    
+    :param df: DataFrame containing 'hashtags' column.
+    :return: Plotly figure or None if data is insufficient.
+    """
+    hashtags_series = df['hashtags'].str.split(',', expand=True).stack().str.strip()
+    hashtags_counts = hashtags_series.value_counts().reset_index()
+    hashtags_counts.columns = ['hashtag', 'count']
+    if hashtags_counts.empty:
+        st.warning("No hashtags found to display.")
+        return None
+    fig = px.bar(hashtags_counts.head(10), x='hashtag', y='count', title='Top Hashtags', labels={'hashtag': 'Hashtag', 'count': 'Count'}, template='plotly_dark')
+    fig.update_layout(xaxis_tickangle=-45)
+    return fig
+
+def plot_comprehensive_metrics(df):
+    """
+    Plot comprehensive metrics over time.
+    
+    :param df: DataFrame containing various metrics.
+    :return: List of Plotly figures.
+    """
+    metrics = ['impressions', 'reach', 'saved', 'likes', 'comments', 'plays', 'clips_replays_count', 
+               'ig_reels_video_view_total_time', 'ig_reels_avg_watch_time', 'video_views']
+    
+    figs = []
+    for metric in metrics:
+        if metric in df.columns and not df[metric].isnull().all():
+            try:
+                df_sorted = df.sort_values(by='timestamp')
+                window_length = min(7, len(df_sorted))
+                if window_length < 3:
+                    metric_smoothed = df_sorted[metric]
+                else:
+                    metric_smoothed = savgol_filter(df_sorted[metric], window_length=window_length, polyorder=2)
+                
+                fig = px.line(df_sorted, x='timestamp', y=metric_smoothed, 
+                              title=f'{metric.capitalize()} Over Time', 
+                              labels={'timestamp': 'Date', 'y': metric.capitalize()}, 
+                              template='plotly_dark')
+                fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
+                fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
+                figs.append(fig)
+            except Exception as e:
+                st.error(f"Error plotting {metric} over time: {e}")
+        else:
+            st.warning(f"{metric.capitalize()} data is missing or incomplete. Unable to plot {metric} over time.")
+    return figs
+
+def plot_follower_growth(df):
+    """
+    Plot Follower Growth Over Time.
+    
+    :param df: DataFrame containing 'followers' and 'timestamp' columns.
+    :return: Plotly figure or None if data is insufficient.
+    """
+    if 'followers' in df.columns and not df['followers'].isnull().all():
+        try:
+            df_sorted = df.sort_values(by='timestamp').dropna(subset=['followers', 'timestamp'])
+            if df_sorted.empty:
+                st.warning("Follower data is empty after cleaning. Unable to plot follower growth.")
+                return None
+
+            window_length = min(7, len(df_sorted))
+            if window_length < 3:
+                followers_smoothed = df_sorted['followers']
+            else:
+                followers_smoothed = savgol_filter(df_sorted['followers'], window_length=window_length, polyorder=2)
+
+            fig = px.line(df_sorted, x='timestamp', y=followers_smoothed, title='Follower Growth Over Time', labels={'timestamp': 'Date', 'y': 'Followers'}, template='plotly_dark')
+            fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
+            fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
+            return fig
+        except Exception as e:
+            st.error(f"Error plotting follower growth over time: {e}")
+            return None
+    else:
+        st.warning("Follower data is missing or incomplete. Unable to plot follower growth over time.")
+        return None
 
 # Main Application Function
+# Updated Main Application Function
+
 def main():
     st.title('Ultimate Instagram Analysis Dashboard')
 
@@ -564,7 +753,7 @@ def main():
             start_date, end_date = st.date_input('Select Date Range', [min_date, max_date], min_value=min_date, max_value=max_date)
             media_types = df['media_type'].unique().tolist()
             selected_media_types = st.multiselect('Select Media Types', media_types, default=media_types)
-            all_hashtags = df['hashtags'].dropna().str.split(',', expand=True).stack().unique().tolist()
+            all_hashtags = df['hashtags'].dropna().str.split(',', expand=True).stack().str.strip().unique().tolist()
             selected_hashtags = st.multiselect('Select Hashtags', all_hashtags)
             st.header('AI Settings')
             ai_model = st.selectbox('Select AI Model', options=['gpt-4', 'gpt-3.5-turbo'])
