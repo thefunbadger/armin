@@ -796,10 +796,10 @@ def main():
             else:
                 st.session_state['api_errors'].append('Failed to retrieve access token.')
 
-    if st.session_state['api_errors']:
-        with st.expander("View API Errors"):
-            for error in st.session_state['api_errors']:
-                st.write(error)
-
-if __name__ == '__main__':
-    main()
+        if st.session_state['api_errors']:
+            with st.expander("View API Errors"):
+                for error in st.session_state['api_errors']:
+                    st.write(error)
+    
+    if __name__ == '__main__':
+        main()
