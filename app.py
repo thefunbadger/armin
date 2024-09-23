@@ -353,13 +353,7 @@ def get_recommendations(df):
     elif pd.notnull(avg_reach):
         recommendations.append('Your average reach is healthy. Keep up the good work!')
 
-    if 'likes' in df.columns and 'comments' in df.columns and 'followers' in df.columns:
-        df['engagement_rate'] = (df['likes'] + df['comments']) / df['followers'].replace(0, 1) * 100
-        avg_engagement = df['engagement_rate'].mean()
-        if pd.notnull(avg_engagement) and avg_engagement < 1:
-            recommendations.append('Your average engagement rate is below 1%. Engage more with your audience through interactive content.')
-        elif pd.notnull(avg_engagement):
-            recommendations.append('Your engagement rate is healthy. Continue creating engaging content!')
+# Engagement rate metric is removed since it's obsolete in v20.0
 
     hashtags_series = df['hashtags'].str.split(',', expand=True).stack()
     top_hashtags = hashtags_series.value_counts()
@@ -448,7 +442,6 @@ def query_huggingface(prompt, model="distilgpt2", max_retries=5, backoff_factor=
     headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
     payload = {
         "inputs": prompt,
-        "options": {"use_cache": False},
         "parameters": {
             "max_length": 300,
             "no_repeat_ngram_size": 2,
@@ -463,19 +456,24 @@ def query_huggingface(prompt, model="distilgpt2", max_retries=5, backoff_factor=
     for attempt in range(1, max_retries + 1):
         response = requests.post(api_url, headers=headers, json=payload)
         if response.status_code == 200:
-            return response.json()
+            result = response.json()
+            if isinstance(result, list) and len(result) > 0 and 'generated_text' in result[0]:
+                return result[0]['generated_text']
+            else:
+                return "AI model returned an unexpected format."
         elif response.status_code == 503:
             st.warning(f"AI Model is loading. Retrying in {backoff_factor} seconds... (Attempt {attempt}/{max_retries})")
             time.sleep(backoff_factor)
-            backoff_factor *= 2  # Exponential backoff
+            backoff_factor *= 2
         else:
             try:
                 error_message = response.json().get('error', 'Unknown error')
             except:
                 error_message = 'Unknown error'
             st.session_state['api_errors'].append({'error': error_message})
-            return {'error': error_message}
-    return {'error': 'Max retries exceeded. AI model is still loading or unavailable.'}
+            return f"AI Error: {error_message}"
+    return "Max retries exceeded. AI model is still loading or unavailable."
+
 
 def ai_insight(selected_post, user_id, model, max_length, temperature, top_p):
     existing_insight = get_ai_insight_from_db(selected_post['id'])
@@ -579,7 +577,8 @@ def display_visual_content_calendar(df):
     st.subheader("Visual Content Calendar")
 
     if 'scheduled_post_time' not in df.columns:
-        df['scheduled_post_time'] = pd.to_datetime(df['timestamp'])
+        df['scheduled_post_time'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        df = df.dropna(subset=['scheduled_post_time'])
 
     fig = px.timeline(
         df, x_start='scheduled_post_time', x_end='scheduled_post_time', y='media_type',
