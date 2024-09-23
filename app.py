@@ -12,6 +12,7 @@ import os
 import numpy as np
 from scipy.signal import savgol_filter  # For smoothing lines
 from PIL import Image
+from fpdf import FPDF  # For PDF generation
 
 # Load environment variables from .env file (for local development)
 # Note: In production, prefer using st.secrets
@@ -68,28 +69,19 @@ SCOPES = [
 
 # Define Valid Metrics
 VALID_METRICS = {
-    'IMAGE': ['impressions', 'reach', 'saved', 'likes', 'comments'],
+    'IMAGE': [
+        'impressions', 'reach', 'saved', 'likes', 'comments',
+        'engagement', 'profile_views', 'website_clicks'
+    ],
     'VIDEO': [
-        'plays',
-        'clips_replays_count',
-        'ig_reels_video_view_total_time',
-        'ig_reels_avg_watch_time',
-        'video_views',
-        'saved',
-        'reach',
-        'likes',
-        'comments'
+        'plays', 'clips_replays_count', 'ig_reels_video_view_total_time',
+        'ig_reels_avg_watch_time', 'video_views', 'saved', 'reach',
+        'likes', 'comments', 'engagement', 'profile_views', 'website_clicks'
     ],
     'REELS': [
-        'plays',
-        'clips_replays_count',
-        'ig_reels_video_view_total_time',
-        'ig_reels_avg_watch_time',
-        'video_views',
-        'saved',
-        'reach',
-        'likes',
-        'comments'
+        'plays', 'clips_replays_count', 'ig_reels_video_view_total_time',
+        'ig_reels_avg_watch_time', 'video_views', 'saved', 'reach',
+        'likes', 'comments', 'engagement', 'profile_views', 'website_clicks'
     ]
 }
 
@@ -116,7 +108,6 @@ def get_mongo_collection(collection_name):
 
 # Initialize the MongoDBHelper with your connection string and database
 mongo_helper = MongoDBHelper(MONGO_CONNECTION_STRING, 'thefunbadger')
-# Continue from Part 1
 
 # Function to exchange short-lived token for a long-lived token
 def exchange_for_long_lived_token(short_lived_token):
@@ -210,7 +201,7 @@ def get_media_insights(access_token, media_id, media_type):
             st.write(json_response)
 
         if response.status_code == 200:
-            return response.json().get('data', [])
+            return json_response.get('data', [])
         else:
             st.session_state['api_errors'].append(response.json())
             return []
@@ -251,6 +242,8 @@ def fetch_all_data(access_token, instagram_account_id):
             'ig_reels_video_view_total_time': None,
             'ig_reels_avg_watch_time': None,
             'video_views': None,
+            'profile_views': None,
+            'website_clicks': None,
             'hashtags': extract_hashtags(item.get('caption', '')),
             'followers': None
         }
@@ -272,6 +265,7 @@ def fetch_all_data(access_token, instagram_account_id):
 def extract_hashtags(caption):
     hashtags = [tag.strip('#') for tag in caption.split() if tag.startswith('#')]
     return ','.join(hashtags)
+
 def check_openai_api():
     headers = {
         "Authorization": f"Bearer {st.secrets['OPENAI_API_KEY']}",
@@ -290,6 +284,7 @@ def check_openai_api():
             return False
     except:
         return False
+
 # Data Analysis Functions
 def calculate_metrics(df):
     numeric_columns = [
@@ -303,6 +298,8 @@ def calculate_metrics(df):
         'ig_reels_video_view_total_time',
         'ig_reels_avg_watch_time',
         'video_views',
+        'profile_views',
+        'website_clicks',
         'followers'
     ]
     for col in numeric_columns:
@@ -341,6 +338,19 @@ def get_recommendations(df):
         df['hour'] = df['timestamp'].dt.hour
         top_hour = df['hour'].mode()[0]
         recommendations.append(f'Consider posting more frequently around {top_hour}:00 hours when your audience is most active.')
+
+    # Additional Recommendations
+    avg_engagement = df['engagement_rate'].mean()
+    if pd.notnull(avg_engagement) and avg_engagement < 1.5:
+        recommendations.append('Your engagement rate is below industry standards. Engage more with your audience through stories and interactive posts.')
+    elif pd.notnull(avg_engagement):
+        recommendations.append('Your engagement rate is good. Continue creating engaging content!')
+
+    # Followers Growth
+    if 'followers' in df.columns and not df['followers'].isnull().all():
+        follower_growth = df['followers'].diff().mean()
+        if pd.notnull(follower_growth) and follower_growth < 10:
+            recommendations.append('Your follower growth rate is slow. Consider running promotions or collaborating with influencers.')
 
     return recommendations
 
@@ -396,82 +406,9 @@ def get_data_from_db(user_id):
         st.error(f"Error fetching data from MongoDB: {e}")
         return pd.DataFrame()
 
-# Function to handle AI Insights using ChatGPT API
-def get_ai_insights(prompt):
-    headers = {
-        "Authorization": f"Bearer {st.secrets['OPENAI_API_KEY']}",  # Correctly formatted with "Bearer "
-        "Content-Type": "application/json"
-    }
-    data = {
-        "model": "gpt-3.5-turbo",  # You can use gpt-3.5-turbo if you want to stick with the free version
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 300,
-        "temperature": 0.7
-    }
+# Removed AI Insights related functions and code
 
-    try:
-        response = requests.post(OPENAI_API_URL, headers=headers, json=data)
-        if response.status_code == 200:
-            result = response.json()
-            return result['choices'][0]['message']['content'].strip()
-        else:
-            error_detail = response.json().get('error', {}).get('message', 'Unknown error')
-            st.session_state['api_errors'].append(f"OpenAI API Error: {error_detail}")
-            return "AI Error: Unable to fetch insights."
-    except Exception as e:
-        st.session_state['api_errors'].append({'error': str(e)})
-        return "AI Error: An exception occurred."
-
-
-# Competitor Benchmarking Functions
-def get_competitor_data(competitor_account_id, access_token):
-    # Placeholder function: Implement data fetching from competitor accounts
-    # Requires appropriate permissions and access
-    # For demonstration, returning mock data
-    mock_data = {
-        'competitor_name': f'Competitor {competitor_account_id}',
-        'reach': 1500,
-        'impressions': 3000,
-        'engagement_rate': 2.5
-    }
-    return mock_data
-
-def compare_performance(df, access_token):
-    st.subheader("Competitor Benchmarking")
-
-    competitors = st.text_input("Enter Competitor Instagram Account IDs (comma separated):")
-    if competitors:
-        competitor_ids = [cid.strip() for cid in competitors.split(',')]
-        competitors_data = []
-        for cid in competitor_ids:
-            data = get_competitor_data(cid, access_token)
-            if data:
-                competitors_data.append(data)
-        
-        if competitors_data:
-            competitors_df = pd.DataFrame(competitors_data)
-            user_metrics = {
-                'competitor_name': 'Your Account',
-                'reach': df['reach'].mean(),
-                'impressions': df['impressions'].mean(),
-                'engagement_rate': df['engagement_rate'].mean()
-            }
-            competitors_df = pd.concat([competitors_df, pd.DataFrame([user_metrics])], ignore_index=True)
-
-            for metric in ['reach', 'impressions', 'engagement_rate']:
-                if metric in competitors_df.columns:
-                    fig = px.bar(
-                        competitors_df, x='competitor_name', y=metric,
-                        title=f'Competitor Benchmarking: {metric.capitalize()}',
-                        labels={'competitor_name': 'Competitor', metric: metric.capitalize()},
-                        template='plotly_dark'
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No competitor data available.")
-    else:
-        st.info("Enter competitor Instagram Account IDs as comma-separated values without the @ symbol.")
-# Visualization Functions with Plotly
+# Removed Competitor Benchmarking related functions and code
 
 # Visualization Functions with Plotly
 def plot_reach_over_time(df):
@@ -555,15 +492,18 @@ def plot_top_hashtags(df):
 
 
 def plot_comprehensive_metrics(df):
-    metrics = ['impressions', 'reach', 'saved', 'likes', 'comments', 'plays', 'clips_replays_count', 
-               'ig_reels_video_view_total_time', 'ig_reels_avg_watch_time', 'video_views']
+    metrics = [
+        'impressions', 'reach', 'saved', 'likes', 'comments', 'plays',
+        'clips_replays_count', 'ig_reels_video_view_total_time',
+        'ig_reels_avg_watch_time', 'video_views', 'profile_views', 'website_clicks'
+    ]
 
     figs = []
     for metric in metrics:
         if metric in df.columns and not df[metric].isnull().all():
-            df = df.sort_values(by='timestamp')
-            metric_smoothed = savgol_filter(df[metric], window_length=7, polyorder=2)  # Smoothing the line
-            fig = px.line(df, x='timestamp', y=metric_smoothed, title=f'{metric.capitalize()} Over Time', 
+            df_sorted = df.sort_values(by='timestamp')
+            metric_smoothed = savgol_filter(df_sorted[metric], window_length=min(7, len(df_sorted)), polyorder=2) if len(df_sorted) >= 3 else df_sorted[metric]
+            fig = px.line(df_sorted, x='timestamp', y=metric_smoothed, title=f'{metric.capitalize()} Over Time', 
                           labels={'timestamp': 'Date', metric: metric.capitalize()}, 
                           template='plotly_dark')
             fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
@@ -583,9 +523,53 @@ def plot_follower_growth(df):
         st.warning("Follower data is missing or incomplete. Unable to plot follower growth over time.")
         return None
 
-# Main Application Function
-# Updated Main Application Function
+# Export Functions
+def export_to_csv(df):
+    # Prepare CSV for ChatGPT Analysis
+    # Ensure that the CSV includes all relevant metrics and is well-structured
+    csv = df.to_csv(index=False)
+    st.download_button(
+        label="Download data as CSV",
+        data=csv,
+        file_name='instagram_data.csv',
+        mime='text/csv',
+    )
 
+def export_to_pdf(df):
+    # Simple PDF export using FPDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    # Title
+    pdf.cell(200, 10, txt="Instagram Data Analysis", ln=True, align='C')
+
+    # Add table headers
+    headers = df.columns.tolist()
+    for header in headers:
+        pdf.cell(40, 10, header, border=1)
+    pdf.ln()
+
+    # Add table rows
+    for index, row in df.iterrows():
+        for item in row:
+            pdf.cell(40, 10, str(item), border=1)
+        pdf.ln()
+
+    # Output PDF to a buffer
+    from io import BytesIO
+    pdf_buffer = BytesIO()
+    pdf.output(pdf_buffer)
+    pdf_buffer.seek(0)
+
+    st.download_button(
+        label="Download data as PDF",
+        data=pdf_buffer,
+        file_name='instagram_data.pdf',
+        mime='application/pdf',
+    )
+
+# Main Application Function
 def main():
     st.title('Ultimate Instagram Analysis Dashboard')
 
@@ -699,17 +683,20 @@ def main():
             selected_media_types = st.multiselect('Select Media Types', media_types, default=media_types)
             all_hashtags = df['hashtags'].dropna().str.split(',', expand=True).stack().str.strip().unique().tolist()
             selected_hashtags = st.multiselect('Select Hashtags', all_hashtags)
-            st.header('AI Settings')
-            ai_model = st.selectbox('Select AI Model', options=['gpt-4', 'gpt-3.5-turbo'])
-            ai_max_length = st.slider('Max Length', min_value=50, max_value=500, value=300)
-            ai_temperature = st.slider('Temperature', min_value=0.1, max_value=1.0, value=0.7)
-            ai_top_p = st.slider('Top P', min_value=0.1, max_value=1.0, value=0.9)
-            # <-- Added: OpenAI API Key Status Indicator
-            st.header('ChatGPT API Status')
-            if check_openai_api():
-                st.success("🟢 OpenAI API Key is Valid and Working!")
-            else:
-                st.error("🔴 OpenAI API Key is Invalid or Not Working!")
+            
+            # Removed AI Settings as AI Insights are removed
+
+            # <-- Added: OpenAI API Key Status Indicator (optional, can be removed since AI Insights are removed)
+            # st.header('ChatGPT API Status')
+            # if check_openai_api():
+            #     st.success("🟢 OpenAI API Key is Valid and Working!")
+            # else:
+            #     st.error("🔴 OpenAI API Key is Invalid or Not Working!")
+            
+            st.header('Export Data')
+            export_csv = st.button('Export to CSV')
+            export_pdf = st.button('Export to PDF')
+
         # Apply filters to data
         filtered_df = df[
             (df['timestamp'].dt.date >= start_date) & 
@@ -721,8 +708,8 @@ def main():
 
         st.write(f"Displaying {len(filtered_df)} out of {len(df)} posts based on selected filters.")
 
-        # Tabs for different features (Content Calendar removed as per instructions)
-        tabs = st.tabs(["Key Metrics", "AI Insights", "Competitor Benchmarking"])
+        # Tabs for different features (AI Insights and Competitor Benchmarking removed)
+        tabs = st.tabs(["Key Metrics", "Recommendations"])
 
         # Key Metrics Tab
         with tabs[0]:
@@ -755,74 +742,22 @@ def main():
             fig_follower = plot_follower_growth(filtered_df)
             if fig_follower:
                 st.plotly_chart(fig_follower, use_container_width=True)
+            
+            # Export Buttons
+            st.header('Export Data')
+            if export_csv:
+                export_to_csv(filtered_df)
+            if export_pdf:
+                export_to_pdf(filtered_df)
 
-        # AI Insights Tab
+        # Recommendations Tab
         with tabs[1]:
-            st.header('AI Insights for Selected Post')
-            post_ids = filtered_df['id'].tolist()
-            selected_post_id = st.selectbox('Select a Post ID to Get AI Insights', options=post_ids)
-            if selected_post_id:
-                selected_post = filtered_df[filtered_df['id'] == selected_post_id].iloc[0]
-                if st.button('Get AI Insight', key='get_insight_button'):
-                    with st.spinner('Generating insights...'):
-                        # Create prompt for AI
-                        caption = selected_post.get('caption', 'No caption provided.')
-                        metrics = {key: selected_post.get(key, 'N/A') for key in ['impressions', 'reach', 'saved', 'likes', 'comments', 
-                                                                                   'plays', 'clips_replays_count', 
-                                                                                   'ig_reels_video_view_total_time', 
-                                                                                   'ig_reels_avg_watch_time', 'video_views', 'followers']}
-                        hashtags_formatted = ' '.join([f"#{tag}" for tag in selected_post['hashtags'].split(',') if tag])
-                        prompt = f"""
-                        Analyze this Instagram post based on its caption and performance metrics. Provide suggestions for improvement.
+            st.header('Recommendations')
+            recommendations = get_recommendations(filtered_df)
+            for rec in recommendations:
+                st.write(f"- {rec}")
 
-                        Caption:
-                        {caption}
-
-                        {hashtags_formatted}
-                        Metrics:
-                        - Impressions: {metrics['impressions']}
-                        - Reach: {metrics['reach']}
-                        - Saved: {metrics['saved']}
-                        - Likes: {metrics['likes']}
-                        - Comments: {metrics['comments']}
-                        - Plays: {metrics['plays']}
-                        - Clips/Replays Count: {metrics['clips_replays_count']}
-                        - Reels Video View Total Time: {metrics['ig_reels_video_view_total_time']}
-                        - Reels Average Watch Time: {metrics['ig_reels_avg_watch_time']}
-                        - Video Views: {metrics['video_views']}
-                        - Followers: {metrics.get('followers', 'N/A')}
-
-                        Provide detailed analysis and suggestions.
-                        """
-                        ai_insight_text = get_ai_insights(prompt)
-                        st.session_state['ai_insight_text'] = ai_insight_text  # <-- Added to store the insight
-                # Display AI Insight if available
-                if 'ai_insight_text' in st.session_state:
-                    st.subheader('AI Generated Analysis:')
-                    st.markdown(f"**Post Caption**: {selected_post['caption']}")
-                    st.markdown(f"**AI Insight**: {st.session_state['ai_insight_text']}")
-                    
-                    follow_up_question = st.text_area("Ask a follow-up question about this post (optional):", key='follow_up')
-                    if st.button('Ask AI Follow-up', key='ask_ai_followup_button'):
-                        if follow_up_question.strip():
-                            with st.spinner('Getting response from AI...'):
-                                follow_up_prompt = f"Q: {follow_up_question}\nA:"
-                                follow_up_response = get_ai_insights(follow_up_prompt)
-                                st.write(f"**AI Answer:** {follow_up_response}")
-                        else:
-                            st.warning("Please enter a follow-up question.")
-
-
-
-        # Competitor Benchmarking Tab
-        with tabs[2]:
-            compare_performance(filtered_df, st.session_state['access_token'])
-
-        # Display recommendations
-        st.header('Recommendations')
-        recommendations = get_recommendations(filtered_df)
-        for rec in recommendations:
-            st.write(f"- {rec}")
+        # Removed AI Insights and Competitor Benchmarking Tabs
 
     # If not authenticated, provide Facebook login option
     if 'access_token' not in st.session_state:
