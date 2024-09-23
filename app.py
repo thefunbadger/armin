@@ -160,7 +160,7 @@ def get_data_from_db(user_id):
         return pd.DataFrame()
 
 def save_ai_insight_to_db(post_id, ai_text):
-    collection = get_mongo_collection('auth')
+    collection = get_mongo_collection('ai_insights')  # Change from 'auth' to 'ai_insights'
     collection.update_one(
         {'post_id': post_id},
         {'$set': {'ai_insight': ai_text}},
@@ -168,7 +168,7 @@ def save_ai_insight_to_db(post_id, ai_text):
     )
 
 def get_ai_insight_from_db(post_id):
-    collection = get_mongo_collection('auth')
+    collection = get_mongo_collection('ai_insights')  # Change from 'auth' to 'ai_insights'
     try:
         data = collection.find_one({'post_id': post_id})
         if data and 'ai_insight' in data:
@@ -375,23 +375,24 @@ def get_recommendations(df):
     return recommendations
 
 # Visualization Functions with Plotly
+import numpy as np
+from scipy.signal import savgol_filter  # For smoothing lines
+
 def plot_reach_over_time(df):
     if 'reach' in df.columns and not df['reach'].isnull().all():
-        fig = px.line(df, x='timestamp', y='reach', title='Reach Over Time', labels={'timestamp': 'Date', 'reach': 'Reach'}, template='plotly_dark')
+        df = df.sort_values(by='timestamp')
+        reach_smoothed = savgol_filter(df['reach'], window_length=7, polyorder=2)  # Smooth the line
+        
+        fig = px.line(df, x='timestamp', y=reach_smoothed, title='Reach Over Time', 
+                      labels={'timestamp': 'Date', 'reach': 'Reach'}, 
+                      template='plotly_dark')
+        fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))  # Improved clarity with markers
         fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
         return fig
     else:
         st.warning("Reach data is missing or incomplete. Unable to plot reach over time.")
         return None
 
-def plot_engagement_over_time(df):
-    if 'engagement_rate' in df.columns and not df['engagement_rate'].isnull().all():
-        fig = px.line(df, x='timestamp', y='engagement_rate', title='Engagement Rate Over Time', labels={'timestamp': 'Date', 'engagement_rate': 'Engagement Rate (%)'}, template='plotly_dark')
-        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
-        return fig
-    else:
-        st.warning("Engagement rate data is missing or incomplete. Unable to plot engagement rate over time.")
-        return None
 
 def plot_top_posts(df, metric='reach', top_n=5):
     if metric not in df.columns or df[metric].isnull().all():
@@ -420,12 +421,18 @@ def plot_comprehensive_metrics(df):
     figs = []
     for metric in metrics:
         if metric in df.columns and not df[metric].isnull().all():
-            fig = px.line(df, x='timestamp', y=metric, title=f'{metric.capitalize()} Over Time', labels={'timestamp': 'Date', metric: metric.capitalize()}, template='plotly_dark')
+            df = df.sort_values(by='timestamp')
+            metric_smoothed = savgol_filter(df[metric], window_length=7, polyorder=2)  # Smoothing the line
+            fig = px.line(df, x='timestamp', y=metric_smoothed, title=f'{metric.capitalize()} Over Time', 
+                          labels={'timestamp': 'Date', metric: metric.capitalize()}, 
+                          template='plotly_dark')
+            fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
             fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
             figs.append(fig)
         else:
             st.warning(f"{metric.capitalize()} data is missing or incomplete. Unable to plot {metric} over time.")
     return figs
+
 
 def plot_follower_growth(df):
     if 'followers' in df.columns and not df['followers'].isnull().all():
@@ -756,9 +763,19 @@ def main():
             
             if st.button('Get AI Insight'):
                 with st.spinner('Generating insights...'):
-                    insight = ai_insight(selected_post, user_id, model=ai_model, max_length=ai_max_length, temperature=ai_temperature, top_p=ai_top_p)
-                    st.subheader('AI Analysis:')
-                    st.write(insight)
+                    ai_insight_text = ai_insight(selected_post, user_id, model=ai_model, max_length=ai_max_length, temperature=ai_temperature, top_p=ai_top_p)
+                    st.subheader('AI Generated Analysis:')
+                    st.write("---")  # Separation between user and AI input
+                    st.markdown(f"**Post Caption**: {selected_post['caption']}")
+                    st.markdown(f"**AI Insight**: {ai_insight_text}")
+                    
+                    # Allow user to ask follow-up questions
+                    st.write("---")
+                    follow_up_question = st.text_area("Ask a follow-up question about this post (optional):")
+                    if st.button('Ask AI'):
+                        with st.spinner('Getting response from AI...'):
+                            follow_up_response = query_huggingface(f"Q: {follow_up_question}\nA:", model=ai_model)
+                            st.write(f"AI Answer: {follow_up_response[0]['generated_text']}")
         
         with tabs[3]:
             compare_performance(filtered_df, st.session_state['access_token'])
