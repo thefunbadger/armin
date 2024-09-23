@@ -385,7 +385,7 @@ def get_ai_insights(prompt):
         "Content-Type": "application/json"
     }
     data = {
-        "model": "gpt-4",
+        "model": "gpt-4",  # Ensure you have access to this model
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 300,
         "temperature": 0.7
@@ -397,7 +397,8 @@ def get_ai_insights(prompt):
             result = response.json()
             return result['choices'][0]['message']['content'].strip()
         else:
-            st.session_state['api_errors'].append(response.json())
+            error_detail = response.json().get('error', {}).get('message', 'Unknown error')
+            st.session_state['api_errors'].append(f"OpenAI API Error: {error_detail}")
             return "AI Error: Unable to fetch insights."
     except Exception as e:
         st.session_state['api_errors'].append({'error': str(e)})
@@ -453,6 +454,7 @@ def compare_performance(df, access_token):
         st.info("Enter competitor Instagram Account IDs as comma-separated values without the @ symbol.")
 # Visualization Functions with Plotly
 
+# Visualization Functions with Plotly
 def plot_reach_over_time(df):
     """
     Plot Reach Over Time for the given DataFrame.
@@ -484,7 +486,7 @@ def plot_reach_over_time(df):
         # Create the Plotly line chart
         fig = px.line(df, x='timestamp', y=reach_smoothed, 
                       title='Reach Over Time', 
-                      labels={'timestamp': 'Date', 'y': 'Reach'},
+                      labels={'timestamp': 'Date', 'reach': 'Reach'},
                       template='plotly_dark')
 
         # Update chart aesthetics
@@ -497,58 +499,21 @@ def plot_reach_over_time(df):
         st.error(f"Error plotting reach over time: {e}")
         return None
 
+
 def plot_engagement(df):
-    """
-    Plot Engagement Rate Over Time.
-    
-    :param df: DataFrame containing 'engagement_rate' and 'timestamp' columns.
-    :return: Plotly figure or None if data is insufficient.
-    """
-    if 'engagement_rate' not in df.columns or df['engagement_rate'].isnull().all():
+    if 'engagement_rate' in df.columns and not df['engagement_rate'].isnull().all():
+        fig = px.line(df, x='timestamp', y='engagement_rate', title='Engagement Rate Over Time',
+                      labels={'timestamp': 'Date', 'engagement_rate': 'Engagement Rate (%)'}, 
+                      template='plotly_dark')
+        fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
+        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
+        return fig
+    else:
         st.warning("Engagement rate data is missing or incomplete.")
         return None
 
-    try:
-        # Ensure data is sorted by timestamp and non-null
-        df = df.sort_values(by='timestamp').dropna(subset=['engagement_rate', 'timestamp'])
-        
-        if df.empty:
-            st.warning("Engagement rate data is empty after cleaning. Unable to plot.")
-            return None
-
-        # Apply smoothing filter if enough data points
-        window_length = min(7, len(df))
-        if window_length < 3:
-            st.warning("Not enough data points to apply smoothing. Displaying raw data.")
-            engagement_smoothed = df['engagement_rate']
-        else:
-            engagement_smoothed = savgol_filter(df['engagement_rate'], window_length=window_length, polyorder=2)
-
-        # Create the Plotly line chart
-        fig = px.line(df, x='timestamp', y=engagement_smoothed, 
-                      title='Engagement Rate Over Time', 
-                      labels={'timestamp': 'Date', 'y': 'Engagement Rate (%)'},
-                      template='plotly_dark')
-
-        # Update chart aesthetics
-        fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
-        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
-
-        return fig
-    
-    except Exception as e:
-        st.error(f"Error plotting engagement rate over time: {e}")
-        return None
 
 def plot_top_posts(df, metric='reach', top_n=5):
-    """
-    Plot Top N Posts based on a specified metric.
-    
-    :param df: DataFrame containing posts data.
-    :param metric: The metric to sort by (e.g., 'reach', 'impressions').
-    :param top_n: Number of top posts to display.
-    :return: Plotly figure or None if data is insufficient.
-    """
     if metric not in df.columns or df[metric].isnull().all():
         st.warning(f"{metric.capitalize()} data is missing or incomplete. Unable to plot top posts by {metric}.")
         return None
@@ -557,14 +522,9 @@ def plot_top_posts(df, metric='reach', top_n=5):
     fig.update_layout(xaxis_tickangle=-45)
     return fig
 
+
 def plot_top_hashtags(df):
-    """
-    Plot the top hashtags used in posts.
-    
-    :param df: DataFrame containing 'hashtags' column.
-    :return: Plotly figure or None if data is insufficient.
-    """
-    hashtags_series = df['hashtags'].str.split(',', expand=True).stack().str.strip()
+    hashtags_series = df['hashtags'].str.split(',', expand=True).stack()
     hashtags_counts = hashtags_series.value_counts().reset_index()
     hashtags_counts.columns = ['hashtag', 'count']
     if hashtags_counts.empty:
@@ -574,67 +534,32 @@ def plot_top_hashtags(df):
     fig.update_layout(xaxis_tickangle=-45)
     return fig
 
+
 def plot_comprehensive_metrics(df):
-    """
-    Plot comprehensive metrics over time.
-    
-    :param df: DataFrame containing various metrics.
-    :return: List of Plotly figures.
-    """
     metrics = ['impressions', 'reach', 'saved', 'likes', 'comments', 'plays', 'clips_replays_count', 
                'ig_reels_video_view_total_time', 'ig_reels_avg_watch_time', 'video_views']
-    
+
     figs = []
     for metric in metrics:
         if metric in df.columns and not df[metric].isnull().all():
-            try:
-                df_sorted = df.sort_values(by='timestamp')
-                window_length = min(7, len(df_sorted))
-                if window_length < 3:
-                    metric_smoothed = df_sorted[metric]
-                else:
-                    metric_smoothed = savgol_filter(df_sorted[metric], window_length=window_length, polyorder=2)
-                
-                fig = px.line(df_sorted, x='timestamp', y=metric_smoothed, 
-                              title=f'{metric.capitalize()} Over Time', 
-                              labels={'timestamp': 'Date', 'y': metric.capitalize()}, 
-                              template='plotly_dark')
-                fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
-                fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
-                figs.append(fig)
-            except Exception as e:
-                st.error(f"Error plotting {metric} over time: {e}")
+            df = df.sort_values(by='timestamp')
+            metric_smoothed = savgol_filter(df[metric], window_length=7, polyorder=2)  # Smoothing the line
+            fig = px.line(df, x='timestamp', y=metric_smoothed, title=f'{metric.capitalize()} Over Time', 
+                          labels={'timestamp': 'Date', metric: metric.capitalize()}, 
+                          template='plotly_dark')
+            fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
+            fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
+            figs.append(fig)
         else:
             st.warning(f"{metric.capitalize()} data is missing or incomplete. Unable to plot {metric} over time.")
     return figs
 
+
 def plot_follower_growth(df):
-    """
-    Plot Follower Growth Over Time.
-    
-    :param df: DataFrame containing 'followers' and 'timestamp' columns.
-    :return: Plotly figure or None if data is insufficient.
-    """
     if 'followers' in df.columns and not df['followers'].isnull().all():
-        try:
-            df_sorted = df.sort_values(by='timestamp').dropna(subset=['followers', 'timestamp'])
-            if df_sorted.empty:
-                st.warning("Follower data is empty after cleaning. Unable to plot follower growth.")
-                return None
-
-            window_length = min(7, len(df_sorted))
-            if window_length < 3:
-                followers_smoothed = df_sorted['followers']
-            else:
-                followers_smoothed = savgol_filter(df_sorted['followers'], window_length=window_length, polyorder=2)
-
-            fig = px.line(df_sorted, x='timestamp', y=followers_smoothed, title='Follower Growth Over Time', labels={'timestamp': 'Date', 'y': 'Followers'}, template='plotly_dark')
-            fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
-            fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
-            return fig
-        except Exception as e:
-            st.error(f"Error plotting follower growth over time: {e}")
-            return None
+        fig = px.line(df, x='timestamp', y='followers', title='Follower Growth Over Time', labels={'timestamp': 'Date', 'followers': 'Followers'}, template='plotly_dark')
+        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
+        return fig
     else:
         st.warning("Follower data is missing or incomplete. Unable to plot follower growth over time.")
         return None
@@ -812,51 +737,54 @@ def main():
             st.header('AI Insights for Selected Post')
             post_ids = filtered_df['id'].tolist()
             selected_post_id = st.selectbox('Select a Post ID to Get AI Insights', options=post_ids)
-            selected_post = filtered_df[filtered_df['id'] == selected_post_id].iloc[0]
-            if st.button('Get AI Insight'):
-                with st.spinner('Generating insights...'):
-                    # Create prompt for AI
-                    caption = selected_post.get('caption', 'No caption provided.')
-                    metrics = {key: selected_post.get(key, 'N/A') for key in ['impressions', 'reach', 'saved', 'likes', 'comments', 
-                                                                               'plays', 'clips_replays_count', 
-                                                                               'ig_reels_video_view_total_time', 
-                                                                               'ig_reels_avg_watch_time', 'video_views', 'followers']}
-                    hashtags_formatted = ' '.join([f"#{tag}" for tag in selected_post['hashtags'].split(',') if tag])
-                    prompt = f"""
-                    Analyze this Instagram post based on its caption and performance metrics. Provide suggestions for improvement.
+            if selected_post_id:
+                selected_post = filtered_df[filtered_df['id'] == selected_post_id].iloc[0]
+                if st.button('Get AI Insight'):
+                    with st.spinner('Generating insights...'):
+                        # Create prompt for AI
+                        caption = selected_post.get('caption', 'No caption provided.')
+                        metrics = {key: selected_post.get(key, 'N/A') for key in ['impressions', 'reach', 'saved', 'likes', 'comments', 
+                                                                                   'plays', 'clips_replays_count', 
+                                                                                   'ig_reels_video_view_total_time', 
+                                                                                   'ig_reels_avg_watch_time', 'video_views', 'followers']}
+                        hashtags_formatted = ' '.join([f"#{tag}" for tag in selected_post['hashtags'].split(',') if tag])
+                        prompt = f"""
+                        Analyze this Instagram post based on its caption and performance metrics. Provide suggestions for improvement.
 
-                    Caption:
-                    {caption}
+                        Caption:
+                        {caption}
 
-                    {hashtags_formatted}
-                    Metrics:
-                    - Impressions: {metrics['impressions']}
-                    - Reach: {metrics['reach']}
-                    - Saved: {metrics['saved']}
-                    - Likes: {metrics['likes']}
-                    - Comments: {metrics['comments']}
-                    - Plays: {metrics['plays']}
-                    - Clips/Replays Count: {metrics['clips_replays_count']}
-                    - Reels Video View Total Time: {metrics['ig_reels_video_view_total_time']}
-                    - Reels Average Watch Time: {metrics['ig_reels_avg_watch_time']}
-                    - Video Views: {metrics['video_views']}
-                    - Followers: {metrics.get('followers', 'N/A')}
+                        {hashtags_formatted}
+                        Metrics:
+                        - Impressions: {metrics['impressions']}
+                        - Reach: {metrics['reach']}
+                        - Saved: {metrics['saved']}
+                        - Likes: {metrics['likes']}
+                        - Comments: {metrics['comments']}
+                        - Plays: {metrics['plays']}
+                        - Clips/Replays Count: {metrics['clips_replays_count']}
+                        - Reels Video View Total Time: {metrics['ig_reels_video_view_total_time']}
+                        - Reels Average Watch Time: {metrics['ig_reels_avg_watch_time']}
+                        - Video Views: {metrics['video_views']}
+                        - Followers: {metrics.get('followers', 'N/A')}
 
-                    Provide detailed analysis and suggestions.
-                    """
-                    ai_insight_text = get_ai_insights(prompt)
-                    st.subheader('AI Generated Analysis:')
-                    st.markdown(f"**Post Caption**: {selected_post['caption']}")
-                    st.markdown(f"**AI Insight**: {ai_insight_text}")
-                    follow_up_question = st.text_area("Ask a follow-up question about this post (optional):")
-                    if st.button('Ask AI'):
-                        if follow_up_question.strip():
-                            with st.spinner('Getting response from AI...'):
-                                follow_up_prompt = f"Q: {follow_up_question}\nA:"
-                                follow_up_response = get_ai_insights(follow_up_prompt)
-                                st.write(f"**AI Answer:** {follow_up_response}")
-                        else:
-                            st.warning("Please enter a follow-up question.")
+                        Provide detailed analysis and suggestions.
+                        """
+                        ai_insight_text = get_ai_insights(prompt)
+                        st.subheader('AI Generated Analysis:')
+                        st.markdown(f"**Post Caption**: {selected_post['caption']}")
+                        st.markdown(f"**AI Insight**: {ai_insight_text}")
+                        
+                        follow_up_question = st.text_area("Ask a follow-up question about this post (optional):")
+                        if st.button('Ask AI'):
+                            if follow_up_question.strip():
+                                with st.spinner('Getting response from AI...'):
+                                    follow_up_prompt = f"Q: {follow_up_question}\nA:"
+                                    follow_up_response = get_ai_insights(follow_up_prompt)
+                                    st.write(f"**AI Answer:** {follow_up_response}")
+                            else:
+                                st.warning("Please enter a follow-up question.")
+
 
         # Competitor Benchmarking Tab
         with tabs[2]:
