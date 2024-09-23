@@ -669,6 +669,7 @@ def main():
                         df = get_data_from_db(user_id)
                         if not df.empty:
                             df = calculate_metrics(df)
+                            df = calculate_engagement_rate(df)
                             st.session_state['df'] = df
                             st.session_state['data_fetched'] = True
                             st.success('Data loaded from database!')
@@ -699,6 +700,7 @@ def main():
                             df = fetch_all_data(access_token, user_instagram_id)
                             if not df.empty:
                                 df = calculate_metrics(df)
+                                df = calculate_engagement_rate(df)
                                 st.session_state['df'] = df
                                 st.session_state['data_fetched'] = True
                                 st.success('Data fetched successfully!')
