@@ -448,7 +448,29 @@ def plot_follower_growth(df):
     else:
         st.warning("Follower data is missing or incomplete. Unable to plot follower growth over time.")
         return None
+# Function to calculate engagement rate based on available metrics
+def calculate_engagement_rate(df):
+    if 'likes' in df.columns and 'comments' in df.columns and 'reach' in df.columns:
+        df['engagement_rate'] = (df['likes'] + df['comments']) / df['reach']
+    else:
+        st.warning("Missing data for engagement rate calculation.")
+    return df
 
+# Add this after loading and processing the data
+df = calculate_engagement_rate(df)
+
+# Updated engagement plot function
+def plot_engagement(df):
+    if 'engagement_rate' in df.columns and not df['engagement_rate'].isnull().all():
+        fig = px.line(df, x='timestamp', y='engagement_rate', title='Engagement Rate Over Time',
+                      labels={'timestamp': 'Date', 'engagement_rate': 'Engagement Rate (%)'}, 
+                      template='plotly_dark')
+        fig.update_traces(mode="markers+lines", marker=dict(size=6), line=dict(width=2))
+        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
+        return fig
+    else:
+        st.warning("Engagement rate data is missing or incomplete.")
+        return None
 # AI Assistance Functions with Retry Logic
 def query_huggingface(prompt, model="distilgpt2", max_retries=5, backoff_factor=2):
     headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
@@ -737,10 +759,9 @@ def main():
                 if fig_reach:
                     st.plotly_chart(fig_reach, use_container_width=True)
             with col2:
-                fig_engagement = plot_engagement_over_time(filtered_df)
+                fig_engagement = plot_engagement(filtered_df)  # New function to replace deprecated one
                 if fig_engagement:
-                    st.plotly_chart(fig_engagement, use_container_width=True)
-            
+                    st.plotly_chart(fig_engagement, use_container_width=True)            
             col3, col4 = st.columns(2)
             with col3:
                 fig_top_reach = plot_top_posts(filtered_df, metric='reach')
