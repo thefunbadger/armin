@@ -801,5 +801,5 @@ def main():
             for error in st.session_state['api_errors']:
                 st.write(error)
 
-    if __name__ == '__main__':
+if __name__ == '__main__':
     main()
