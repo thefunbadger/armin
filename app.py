@@ -187,7 +187,7 @@ def get_media_insights(access_token, media_id, media_type):
             return []
 
         metrics_str = ','.join(metrics)
-        url = f"https://graph.facebook.com/v20.0/{media_id}/insights?metric={metrics_str}&access_token={access_token}"
+        url = f"https://graph.facebook.com/v20.0/{media_id}/insights?metric={metrics_str}&period=lifetime&access_token={access_token}"
         response = requests.get(url)
         if response.status_code == 200:
             return response.json().get('data', [])
@@ -200,9 +200,9 @@ def get_media_insights(access_token, media_id, media_type):
 
 def fetch_account_insights(access_token, instagram_account_id):
     try:
-        metrics = ['followers_count']
+        metrics = ['follower_count']
         metrics_str = ','.join(metrics)
-        url = f"https://graph.facebook.com/v20.0/{instagram_account_id}/insights?metric={metrics_str}&access_token={access_token}"
+        url = f"https://graph.facebook.com/v20.0/{instagram_account_id}/insights?metric={metrics_str}&period=lifetime&access_token={access_token}"
         response = requests.get(url)
         if response.status_code == 200:
             data = response.json().get('data', [])
@@ -348,8 +348,7 @@ def export_to_csv(df):
 def export_to_pdf(df):
     pdf = FPDF()
     pdf.add_page()
-    pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
-    pdf.set_font("DejaVu", size=10)
+    pdf.set_font("Arial", size=10)
 
     # Title
     pdf.cell(200, 10, txt="Instagram Data Analysis", ln=True, align='C')
@@ -364,7 +363,12 @@ def export_to_pdf(df):
     for index, row in df.iterrows():
         for item in row:
             text = str(item) if pd.notnull(item) else ''
-            pdf.cell(25, 10, text, border=1)
+            # Replace non-encodable characters
+            try:
+                pdf.cell(25, 10, text, border=1)
+            except:
+                text = text.encode('latin-1', 'replace').decode('latin-1')
+                pdf.cell(25, 10, text, border=1)
         pdf.ln()
 
     pdf_buffer = BytesIO()
