@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 import os
 import numpy as np
 from scipy.signal import savgol_filter  # For smoothing lines
+from PIL import Image
 
 # Load environment variables from .env file (for local development)
 # Note: In production, prefer using st.secrets
@@ -271,7 +272,24 @@ def fetch_all_data(access_token, instagram_account_id):
 def extract_hashtags(caption):
     hashtags = [tag.strip('#') for tag in caption.split() if tag.startswith('#')]
     return ','.join(hashtags)
-
+def check_openai_api():
+    headers = {
+        "Authorization": f"Bearer {st.secrets['OPENAI_API_KEY']}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "gpt-3.5-turbo",
+        "messages": [{"role": "user", "content": "Hello, OpenAI!"}],
+        "max_tokens": 5
+    }
+    try:
+        response = requests.post(OPENAI_API_URL, headers=headers, json=data)
+        if response.status_code == 200:
+            return True
+        else:
+            return False
+    except:
+        return False
 # Data Analysis Functions
 def calculate_metrics(df):
     numeric_columns = [
@@ -685,7 +703,12 @@ def main():
             ai_max_length = st.slider('Max Length', min_value=50, max_value=500, value=300)
             ai_temperature = st.slider('Temperature', min_value=0.1, max_value=1.0, value=0.7)
             ai_top_p = st.slider('Top P', min_value=0.1, max_value=1.0, value=0.9)
-
+            # <-- Added: OpenAI API Key Status Indicator
+            st.header('ChatGPT API Status')
+            if check_openai_api():
+                st.success("🟢 OpenAI API Key is Valid and Working!")
+            else:
+                st.error("🔴 OpenAI API Key is Invalid or Not Working!")
         # Apply filters to data
         filtered_df = df[
             (df['timestamp'].dt.date >= start_date) & 
@@ -739,7 +762,7 @@ def main():
             selected_post_id = st.selectbox('Select a Post ID to Get AI Insights', options=post_ids)
             if selected_post_id:
                 selected_post = filtered_df[filtered_df['id'] == selected_post_id].iloc[0]
-                if st.button('Get AI Insight'):
+                if st.button('Get AI Insight', key='get_insight_button'):
                     with st.spinner('Generating insights...'):
                         # Create prompt for AI
                         caption = selected_post.get('caption', 'No caption provided.')
@@ -771,19 +794,23 @@ def main():
                         Provide detailed analysis and suggestions.
                         """
                         ai_insight_text = get_ai_insights(prompt)
-                        st.subheader('AI Generated Analysis:')
-                        st.markdown(f"**Post Caption**: {selected_post['caption']}")
-                        st.markdown(f"**AI Insight**: {ai_insight_text}")
-                        
-                        follow_up_question = st.text_area("Ask a follow-up question about this post (optional):")
-                        if st.button('Ask AI'):
-                            if follow_up_question.strip():
-                                with st.spinner('Getting response from AI...'):
-                                    follow_up_prompt = f"Q: {follow_up_question}\nA:"
-                                    follow_up_response = get_ai_insights(follow_up_prompt)
-                                    st.write(f"**AI Answer:** {follow_up_response}")
-                            else:
-                                st.warning("Please enter a follow-up question.")
+                        st.session_state['ai_insight_text'] = ai_insight_text  # <-- Added to store the insight
+                # Display AI Insight if available
+                if 'ai_insight_text' in st.session_state:
+                    st.subheader('AI Generated Analysis:')
+                    st.markdown(f"**Post Caption**: {selected_post['caption']}")
+                    st.markdown(f"**AI Insight**: {st.session_state['ai_insight_text']}")
+                    
+                    follow_up_question = st.text_area("Ask a follow-up question about this post (optional):", key='follow_up')
+                    if st.button('Ask AI Follow-up', key='ask_ai_followup_button'):
+                        if follow_up_question.strip():
+                            with st.spinner('Getting response from AI...'):
+                                follow_up_prompt = f"Q: {follow_up_question}\nA:"
+                                follow_up_response = get_ai_insights(follow_up_prompt)
+                                st.write(f"**AI Answer:** {follow_up_response}")
+                        else:
+                            st.warning("Please enter a follow-up question.")
+
 
 
         # Competitor Benchmarking Tab
