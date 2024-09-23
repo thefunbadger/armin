@@ -116,10 +116,9 @@ class MongoDBHelper:
 
 
 def get_mongo_collection(collection_name):
-    client = get_mongo_client()
-    db = client['thefunbadger']  # Replace with your database name
-    collection = db[collection_name]  # Dynamic collection name
-    return collection
+    # Use the MongoDBHelper instance instead of calling undefined get_mongo_client()
+    return mongo_helper.get_collection(collection_name)
+
 mongo_helper = MongoDBHelper(MONGO_CONNECTION_STRING, 'thefunbadger')
 
 def save_access_token_to_db(token, expires_at, user_id):
