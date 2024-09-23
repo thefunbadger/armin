@@ -374,432 +374,432 @@ def get_recommendations(df):
 
     return recommendations
 
-    # Visualization Functions with Plotly
-    def plot_reach_over_time(df):
-        if 'reach' in df.columns and not df['reach'].isnull().all():
-            fig = px.line(df, x='timestamp', y='reach', title='Reach Over Time', labels={'timestamp': 'Date', 'reach': 'Reach'}, template='plotly_dark')
-            fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
-            return fig
-        else:
-            st.warning("Reach data is missing or incomplete. Unable to plot reach over time.")
-            return None
-    
-    def plot_engagement_over_time(df):
-        if 'engagement_rate' in df.columns and not df['engagement_rate'].isnull().all():
-            fig = px.line(df, x='timestamp', y='engagement_rate', title='Engagement Rate Over Time', labels={'timestamp': 'Date', 'engagement_rate': 'Engagement Rate (%)'}, template='plotly_dark')
-            fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
-            return fig
-        else:
-            st.warning("Engagement rate data is missing or incomplete. Unable to plot engagement rate over time.")
-            return None
-    
-    def plot_top_posts(df, metric='reach', top_n=5):
-        if metric not in df.columns or df[metric].isnull().all():
-            st.warning(f"{metric.capitalize()} data is missing or incomplete. Unable to plot top posts by {metric}.")
-            return None
-        top_posts = df.sort_values(by=metric, ascending=False).head(top_n)
-        fig = px.bar(top_posts, x='id', y=metric, title=f'Top {top_n} Posts by {metric.capitalize()}', labels={'id': 'Post ID', metric: metric.capitalize()}, template='plotly_dark')
-        fig.update_layout(xaxis_tickangle=-45)
+# Visualization Functions with Plotly
+def plot_reach_over_time(df):
+    if 'reach' in df.columns and not df['reach'].isnull().all():
+        fig = px.line(df, x='timestamp', y='reach', title='Reach Over Time', labels={'timestamp': 'Date', 'reach': 'Reach'}, template='plotly_dark')
+        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
         return fig
-    
-    def plot_top_hashtags(df):
-        hashtags_series = df['hashtags'].str.split(',', expand=True).stack()
-        hashtags_counts = hashtags_series.value_counts().reset_index()
-        hashtags_counts.columns = ['hashtag', 'count']
-        if hashtags_counts.empty:
-            st.warning("No hashtags found to display.")
-            return None
-        fig = px.bar(hashtags_counts.head(10), x='hashtag', y='count', title='Top Hashtags', labels={'hashtag': 'Hashtag', 'count': 'Count'}, template='plotly_dark')
-        fig.update_layout(xaxis_tickangle=-45)
+    else:
+        st.warning("Reach data is missing or incomplete. Unable to plot reach over time.")
+        return None
+
+def plot_engagement_over_time(df):
+    if 'engagement_rate' in df.columns and not df['engagement_rate'].isnull().all():
+        fig = px.line(df, x='timestamp', y='engagement_rate', title='Engagement Rate Over Time', labels={'timestamp': 'Date', 'engagement_rate': 'Engagement Rate (%)'}, template='plotly_dark')
+        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
         return fig
-    
-    def plot_comprehensive_metrics(df):
-        metrics = ['impressions', 'reach', 'saved', 'likes', 'comments', 'plays', 'clips_replays_count', 
-                   'ig_reels_video_view_total_time', 'ig_reels_avg_watch_time', 'video_views']
+    else:
+        st.warning("Engagement rate data is missing or incomplete. Unable to plot engagement rate over time.")
+        return None
+
+def plot_top_posts(df, metric='reach', top_n=5):
+    if metric not in df.columns or df[metric].isnull().all():
+        st.warning(f"{metric.capitalize()} data is missing or incomplete. Unable to plot top posts by {metric}.")
+        return None
+    top_posts = df.sort_values(by=metric, ascending=False).head(top_n)
+    fig = px.bar(top_posts, x='id', y=metric, title=f'Top {top_n} Posts by {metric.capitalize()}', labels={'id': 'Post ID', metric: metric.capitalize()}, template='plotly_dark')
+    fig.update_layout(xaxis_tickangle=-45)
+    return fig
+
+def plot_top_hashtags(df):
+    hashtags_series = df['hashtags'].str.split(',', expand=True).stack()
+    hashtags_counts = hashtags_series.value_counts().reset_index()
+    hashtags_counts.columns = ['hashtag', 'count']
+    if hashtags_counts.empty:
+        st.warning("No hashtags found to display.")
+        return None
+    fig = px.bar(hashtags_counts.head(10), x='hashtag', y='count', title='Top Hashtags', labels={'hashtag': 'Hashtag', 'count': 'Count'}, template='plotly_dark')
+    fig.update_layout(xaxis_tickangle=-45)
+    return fig
+
+def plot_comprehensive_metrics(df):
+    metrics = ['impressions', 'reach', 'saved', 'likes', 'comments', 'plays', 'clips_replays_count', 
+               'ig_reels_video_view_total_time', 'ig_reels_avg_watch_time', 'video_views']
+
+    figs = []
+    for metric in metrics:
+        if metric in df.columns and not df[metric].isnull().all():
+            fig = px.line(df, x='timestamp', y=metric, title=f'{metric.capitalize()} Over Time', labels={'timestamp': 'Date', metric: metric.capitalize()}, template='plotly_dark')
+            fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
+            figs.append(fig)
+        else:
+            st.warning(f"{metric.capitalize()} data is missing or incomplete. Unable to plot {metric} over time.")
+    return figs
+
+def plot_follower_growth(df):
+    if 'followers' in df.columns and not df['followers'].isnull().all():
+        fig = px.line(df, x='timestamp', y='followers', title='Follower Growth Over Time', labels={'timestamp': 'Date', 'followers': 'Followers'}, template='plotly_dark')
+        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
+        return fig
+    else:
+        st.warning("Follower data is missing or incomplete. Unable to plot follower growth over time.")
+        return None
+
+# AI Assistance Functions with Retry Logic
+def query_huggingface(prompt, model="distilgpt2", max_retries=5, backoff_factor=2):
+    headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
+    payload = {
+        "inputs": prompt,
+        "options": {"use_cache": False},
+        "parameters": {
+            "max_length": 300,
+            "no_repeat_ngram_size": 2,
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "do_sample": True
+        }
+    }
+
+    api_url = f"https://api-inference.huggingface.co/models/{model}"
+
+    for attempt in range(1, max_retries + 1):
+        response = requests.post(api_url, headers=headers, json=payload)
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 503:
+            st.warning(f"AI Model is loading. Retrying in {backoff_factor} seconds... (Attempt {attempt}/{max_retries})")
+            time.sleep(backoff_factor)
+            backoff_factor *= 2  # Exponential backoff
+        else:
+            try:
+                error_message = response.json().get('error', 'Unknown error')
+            except:
+                error_message = 'Unknown error'
+            st.session_state['api_errors'].append({'error': error_message})
+            return {'error': error_message}
+    return {'error': 'Max retries exceeded. AI model is still loading or unavailable.'}
+
+def ai_insight(selected_post, user_id, model, max_length, temperature, top_p):
+    existing_insight = get_ai_insight_from_db(selected_post['id'])
+    if existing_insight:
+        return existing_insight
+
+    caption = selected_post.get('caption', 'No caption provided.')
+    metrics = {key: selected_post.get(key, 'N/A') for key in ['impressions', 'reach', 'saved', 'likes', 'comments', 
+                                                               'plays', 'clips_replays_count', 
+                                                               'ig_reels_video_view_total_time', 
+                                                               'ig_reels_avg_watch_time', 'video_views', 'followers']}
+    hashtags_formatted = ' '.join([f"#{tag}" for tag in selected_post['hashtags'].split(',') if tag])
+    prompt = f"""
+    Analyze this Instagram post based on its caption and performance metrics. Provide suggestions for improvement.
+
+    Caption:
+    {caption}
+
+    {hashtags_formatted}
+    Metrics:
+    - Impressions: {metrics['impressions']}
+    - Reach: {metrics['reach']}
+    - Saved: {metrics['saved']}
+    - Likes: {metrics['likes']}
+    - Comments: {metrics['comments']}
+    - Plays: {metrics['plays']}
+    - Clips/Replays Count: {metrics['clips_replays_count']}
+    - Reels Video View Total Time: {metrics['ig_reels_video_view_total_time']}
+    - Reels Average Watch Time: {metrics['ig_reels_avg_watch_time']}
+    - Video Views: {metrics['video_views']}
+    - Followers: {metrics.get('followers', 'N/A')}
+
+    Provide detailed analysis and suggestions.
+    """
+    response = query_huggingface(prompt, model=model, max_retries=5, backoff_factor=2)
+
+    if isinstance(response, dict) and 'error' in response:
+        return f"AI Error: {response['error']}"
+    elif isinstance(response, list) and len(response) > 0 and isinstance(response[0], dict) and 'generated_text' in response[0]:
+        ai_text = response[0]['generated_text']
+    elif isinstance(response, str):
+        ai_text = response
+    else:
+        ai_text = "AI couldn't generate a response. Please try again later."
+
+    save_ai_insight_to_db(selected_post['id'], ai_text)
+    return ai_text
+
+# Competitor Benchmarking (New Feature)
+def get_competitor_data(competitor_account_id, access_token):
+    # Placeholder function: Implement data fetching from competitor accounts
+    # Requires appropriate permissions and access
+    # For demonstration, returning mock data
+    mock_data = {
+        'competitor_name': 'Competitor A',
+        'reach': 1500,
+        'impressions': 3000,
+        'engagement_rate': 2.5
+    }
+    return mock_data
+
+def compare_performance(df, access_token):
+    st.subheader("Competitor Benchmarking")
+
+    competitors = st.text_input("Enter Competitor Instagram Account IDs (comma separated):")
+    if competitors:
+        competitor_ids = [cid.strip() for cid in competitors.split(',')]
+        competitors_data = []
+        for cid in competitor_ids:
+            data = get_competitor_data(cid, access_token)
+            if data:
+                competitors_data.append(data)
         
-        figs = []
-        for metric in metrics:
-            if metric in df.columns and not df[metric].isnull().all():
-                fig = px.line(df, x='timestamp', y=metric, title=f'{metric.capitalize()} Over Time', labels={'timestamp': 'Date', metric: metric.capitalize()}, template='plotly_dark')
-                fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
-                figs.append(fig)
-            else:
-                st.warning(f"{metric.capitalize()} data is missing or incomplete. Unable to plot {metric} over time.")
-        return figs
-    
-    def plot_follower_growth(df):
-        if 'followers' in df.columns and not df['followers'].isnull().all():
-            fig = px.line(df, x='timestamp', y='followers', title='Follower Growth Over Time', labels={'timestamp': 'Date', 'followers': 'Followers'}, template='plotly_dark')
-            fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='x unified')
-            return fig
-        else:
-            st.warning("Follower data is missing or incomplete. Unable to plot follower growth over time.")
-            return None
-    
-    # AI Assistance Functions with Retry Logic
-    def query_huggingface(prompt, model="distilgpt2", max_retries=5, backoff_factor=2):
-        headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
-        payload = {
-            "inputs": prompt,
-            "options": {"use_cache": False},
-            "parameters": {
-                "max_length": 300,
-                "no_repeat_ngram_size": 2,
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "do_sample": True
+        if competitors_data:
+            competitors_df = pd.DataFrame(competitors_data)
+            user_metrics = {
+                'competitor_name': 'Your Account',
+                'reach': df['reach'].mean(),
+                'impressions': df['impressions'].mean(),
+                'engagement_rate': df['engagement_rate'].mean()
             }
-        }
-        
-        api_url = f"https://api-inference.huggingface.co/models/{model}"
-        
-        for attempt in range(1, max_retries + 1):
-            response = requests.post(api_url, headers=headers, json=payload)
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code == 503:
-                st.warning(f"AI Model is loading. Retrying in {backoff_factor} seconds... (Attempt {attempt}/{max_retries})")
-                time.sleep(backoff_factor)
-                backoff_factor *= 2  # Exponential backoff
-            else:
-                try:
-                    error_message = response.json().get('error', 'Unknown error')
-                except:
-                    error_message = 'Unknown error'
-                st.session_state['api_errors'].append({'error': error_message})
-                return {'error': error_message}
-        return {'error': 'Max retries exceeded. AI model is still loading or unavailable.'}
-    
-    def ai_insight(selected_post, user_id, model, max_length, temperature, top_p):
-        existing_insight = get_ai_insight_from_db(selected_post['id'])
-        if existing_insight:
-            return existing_insight
-        
-        caption = selected_post.get('caption', 'No caption provided.')
-        metrics = {key: selected_post.get(key, 'N/A') for key in ['impressions', 'reach', 'saved', 'likes', 'comments', 
-                                                                   'plays', 'clips_replays_count', 
-                                                                   'ig_reels_video_view_total_time', 
-                                                                   'ig_reels_avg_watch_time', 'video_views', 'followers']}
-        hashtags_formatted = ' '.join([f"#{tag}" for tag in selected_post['hashtags'].split(',') if tag])
-        prompt = f"""
-        Analyze this Instagram post based on its caption and performance metrics. Provide suggestions for improvement.
-        
-        Caption:
-        {caption}
-        
-        {hashtags_formatted}
-        Metrics:
-        - Impressions: {metrics['impressions']}
-        - Reach: {metrics['reach']}
-        - Saved: {metrics['saved']}
-        - Likes: {metrics['likes']}
-        - Comments: {metrics['comments']}
-        - Plays: {metrics['plays']}
-        - Clips/Replays Count: {metrics['clips_replays_count']}
-        - Reels Video View Total Time: {metrics['ig_reels_video_view_total_time']}
-        - Reels Average Watch Time: {metrics['ig_reels_avg_watch_time']}
-        - Video Views: {metrics['video_views']}
-        - Followers: {metrics.get('followers', 'N/A')}
-        
-        Provide detailed analysis and suggestions.
-        """
-        response = query_huggingface(prompt, model=model, max_retries=5, backoff_factor=2)
-        
-        if isinstance(response, dict) and 'error' in response:
-            return f"AI Error: {response['error']}"
-        elif isinstance(response, list) and len(response) > 0 and isinstance(response[0], dict) and 'generated_text' in response[0]:
-            ai_text = response[0]['generated_text']
-        elif isinstance(response, str):
-            ai_text = response
-        else:
-            ai_text = "AI couldn't generate a response. Please try again later."
-        
-        save_ai_insight_to_db(selected_post['id'], ai_text)
-        return ai_text
-    
-    # Competitor Benchmarking (New Feature)
-    def get_competitor_data(competitor_account_id, access_token):
-        # Placeholder function: Implement data fetching from competitor accounts
-        # Requires appropriate permissions and access
-        # For demonstration, returning mock data
-        mock_data = {
-            'competitor_name': 'Competitor A',
-            'reach': 1500,
-            'impressions': 3000,
-            'engagement_rate': 2.5
-        }
-        return mock_data
-    
-    def compare_performance(df, access_token):
-        st.subheader("Competitor Benchmarking")
-        
-        competitors = st.text_input("Enter Competitor Instagram Account IDs (comma separated):")
-        if competitors:
-            competitor_ids = [cid.strip() for cid in competitors.split(',')]
-            competitors_data = []
-            for cid in competitor_ids:
-                data = get_competitor_data(cid, access_token)
-                if data:
-                    competitors_data.append(data)
+            competitors_df = competitors_df.append(user_metrics, ignore_index=True)
             
-            if competitors_data:
-                competitors_df = pd.DataFrame(competitors_data)
-                user_metrics = {
-                    'competitor_name': 'Your Account',
-                    'reach': df['reach'].mean(),
-                    'impressions': df['impressions'].mean(),
-                    'engagement_rate': df['engagement_rate'].mean()
-                }
-                competitors_df = competitors_df.append(user_metrics, ignore_index=True)
-                
-                for metric in ['reach', 'impressions', 'engagement_rate']:
-                    if metric in competitors_df.columns:
-                        fig = px.bar(
-                            competitors_df, x='competitor_name', y=metric,
-                            title=f'Competitor Benchmarking: {metric.capitalize()}',
-                            labels={'competitor_name': 'Competitor', metric: metric.capitalize()},
-                            template='plotly_dark'
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning("No competitor data available.")
+            for metric in ['reach', 'impressions', 'engagement_rate']:
+                if metric in competitors_df.columns:
+                    fig = px.bar(
+                        competitors_df, x='competitor_name', y=metric,
+                        title=f'Competitor Benchmarking: {metric.capitalize()}',
+                        labels={'competitor_name': 'Competitor', metric: metric.capitalize()},
+                        template='plotly_dark'
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Enter competitor Instagram Account IDs to compare performance.")
-    
-    # Visual Content Calendar (New Feature)
-    def display_visual_content_calendar(df):
-        """Display a visual content calendar with drag-and-drop post scheduling."""
-        st.subheader("Visual Content Calendar")
-        
-        if 'scheduled_post_time' not in df.columns:
-            df['scheduled_post_time'] = pd.to_datetime(df['timestamp'])
-        
-        fig = px.timeline(
-            df, x_start='scheduled_post_time', x_end='scheduled_post_time', y='media_type',
-            title='Instagram Post Calendar', labels={'scheduled_post_time': 'Time', 'media_type': 'Post Type'},
-            template='plotly_dark'
-        )
-        fig.update_yaxes(categoryorder="total ascending")
-        fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='closest')
-        st.plotly_chart(fig, use_container_width=True)
-    
+            st.warning("No competitor data available.")
+    else:
+        st.info("Enter competitor Instagram Account IDs to compare performance.")
+
+# Visual Content Calendar (New Feature)
+def display_visual_content_calendar(df):
+    """Display a visual content calendar with drag-and-drop post scheduling."""
+    st.subheader("Visual Content Calendar")
+
+    if 'scheduled_post_time' not in df.columns:
+        df['scheduled_post_time'] = pd.to_datetime(df['timestamp'])
+
+    fig = px.timeline(
+        df, x_start='scheduled_post_time', x_end='scheduled_post_time', y='media_type',
+        title='Instagram Post Calendar', labels={'scheduled_post_time': 'Time', 'media_type': 'Post Type'},
+        template='plotly_dark'
+    )
+    fig.update_yaxes(categoryorder="total ascending")
+    fig.update_layout(xaxis=dict(tickformat="%Y-%m-%d"), hovermode='closest')
+    st.plotly_chart(fig, use_container_width=True)
+
     # Main Application Function
-    def main():
-        st.title('Ultimate Instagram Analysis Dashboard')
-    
-        if st.button("Clear Cache"):
-            st.cache_data.clear()
-            st.cache_resource.clear()
-            st.experimental_rerun()
-    
-        if 'data_fetched' not in st.session_state:
-            st.session_state['data_fetched'] = False
-            st.session_state['df'] = pd.DataFrame()
-        if 'api_errors' not in st.session_state:
-            st.session_state['api_errors'] = []
-        if 'user_id' not in st.session_state:
-            st.session_state['user_id'] = 'default_user'  # Replace with actual user identification
-    
-        user_id = st.session_state['user_id']
-    
-        # Check for access token in session or MongoDB
-        if 'access_token' not in st.session_state:
-            token_data = get_access_token_from_db(user_id)
-    
-            if token_data and token_data[0]:
-                st.session_state['access_token'] = token_data[0]
-                st.session_state['expires_at'] = token_data[1]
-    
-                if datetime.datetime.now() > datetime.datetime.fromisoformat(st.session_state['expires_at']):
-                    st.error('Access token has expired. Please log in again.')
-                    st.session_state.clear()
-                    st.experimental_rerun()
-    
-        if 'access_token' in st.session_state and st.session_state['access_token']:
-            if 'expires_at' in st.session_state:
-                if datetime.datetime.now() > datetime.datetime.fromisoformat(st.session_state['expires_at']):
-                    st.error('Access token has expired. Please log in again.')
-                    st.session_state.clear()
-                    st.experimental_rerun()
-                else:
-                    st.success('Successfully Authenticated!')
-    
-                    if not st.session_state['data_fetched']:
-                        with st.spinner('Loading data from database...'):
-                            df = get_data_from_db(user_id)
+def main():
+    st.title('Ultimate Instagram Analysis Dashboard')
+
+    if st.button("Clear Cache"):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.experimental_rerun()
+
+    if 'data_fetched' not in st.session_state:
+        st.session_state['data_fetched'] = False
+        st.session_state['df'] = pd.DataFrame()
+    if 'api_errors' not in st.session_state:
+        st.session_state['api_errors'] = []
+    if 'user_id' not in st.session_state:
+        st.session_state['user_id'] = 'default_user'  # Replace with actual user identification
+
+    user_id = st.session_state['user_id']
+
+    # Check for access token in session or MongoDB
+    if 'access_token' not in st.session_state:
+        token_data = get_access_token_from_db(user_id)
+
+        if token_data and token_data[0]:
+            st.session_state['access_token'] = token_data[0]
+            st.session_state['expires_at'] = token_data[1]
+
+            if datetime.datetime.now() > datetime.datetime.fromisoformat(st.session_state['expires_at']):
+                st.error('Access token has expired. Please log in again.')
+                st.session_state.clear()
+                st.experimental_rerun()
+
+    if 'access_token' in st.session_state and st.session_state['access_token']:
+        if 'expires_at' in st.session_state:
+            if datetime.datetime.now() > datetime.datetime.fromisoformat(st.session_state['expires_at']):
+                st.error('Access token has expired. Please log in again.')
+                st.session_state.clear()
+                st.experimental_rerun()
+            else:
+                st.success('Successfully Authenticated!')
+
+                if not st.session_state['data_fetched']:
+                    with st.spinner('Loading data from database...'):
+                        df = get_data_from_db(user_id)
+                        if not df.empty:
+                            df = calculate_metrics(df)
+                            st.session_state['df'] = df
+                            st.session_state['data_fetched'] = True
+                            st.success('Data loaded from database!')
+                        else:
+                            st.info('No cached data found. Please update data to fetch from API.')
+
+                if st.button('Update Data') or not st.session_state['data_fetched']:
+                    with st.spinner('Fetching and processing data...'):
+                        pages = get_user_pages(st.session_state['access_token'])
+                        if not pages:
+                            st.error("No Facebook Pages found. Ensure your account manages a page connected to Instagram.")
+                            return
+
+                        instagram_account_id = None
+                        for page in pages:
+                            page_id = page['id']
+                            page_access_token = page['access_token']
+                            instagram_account_id = get_instagram_account_id(page_id, page_access_token)
+                            if instagram_account_id:
+                                st.session_state['instagram_account_id'] = instagram_account_id
+                                st.session_state['page_access_token'] = page_access_token
+                                break
+
+                        if 'instagram_account_id' in st.session_state:
+                            access_token = st.session_state['page_access_token']
+                            user_instagram_id = st.session_state['instagram_account_id']
+
+                            df = fetch_all_data(access_token, user_instagram_id)
                             if not df.empty:
                                 df = calculate_metrics(df)
                                 st.session_state['df'] = df
                                 st.session_state['data_fetched'] = True
-                                st.success('Data loaded from database!')
+                                st.success('Data fetched successfully!')
+
+                                save_data_to_db(df, user_id)
+                                save_access_token_to_db(
+                                    token=st.session_state['access_token'],
+                                    expires_at=st.session_state['expires_at'],
+                                    user_id=user_id
+                                )
                             else:
-                                st.info('No cached data found. Please update data to fetch from API.')
-    
-                    if st.button('Update Data') or not st.session_state['data_fetched']:
-                        with st.spinner('Fetching and processing data...'):
-                            pages = get_user_pages(st.session_state['access_token'])
-                            if not pages:
-                                st.error("No Facebook Pages found. Ensure your account manages a page connected to Instagram.")
-                                return
-    
-                            instagram_account_id = None
-                            for page in pages:
-                                page_id = page['id']
-                                page_access_token = page['access_token']
-                                instagram_account_id = get_instagram_account_id(page_id, page_access_token)
-                                if instagram_account_id:
-                                    st.session_state['instagram_account_id'] = instagram_account_id
-                                    st.session_state['page_access_token'] = page_access_token
-                                    break
-    
-                            if 'instagram_account_id' in st.session_state:
-                                access_token = st.session_state['page_access_token']
-                                user_instagram_id = st.session_state['instagram_account_id']
-    
-                                df = fetch_all_data(access_token, user_instagram_id)
-                                if not df.empty:
-                                    df = calculate_metrics(df)
-                                    st.session_state['df'] = df
-                                    st.session_state['data_fetched'] = True
-                                    st.success('Data fetched successfully!')
-    
-                                    save_data_to_db(df, user_id)
-                                    save_access_token_to_db(
-                                        token=st.session_state['access_token'],
-                                        expires_at=st.session_state['expires_at'],
-                                        user_id=user_id
-                                    )
-                                else:
-                                    st.warning("No data available to display.")
-    
-        if not st.session_state['df'].empty:
-            df = st.session_state['df']
+                                st.warning("No data available to display.")
+
+    if not st.session_state['df'].empty:
+        df = st.session_state['df']
+        
+        # Sidebar Filters
+        with st.sidebar:
+            st.header('Filter Options')
             
-            # Sidebar Filters
-            with st.sidebar:
-                st.header('Filter Options')
-                
-                min_date = df['timestamp'].min().date()
-                max_date = df['timestamp'].max().date()
-                start_date, end_date = st.date_input('Select Date Range', [min_date, max_date], min_value=min_date, max_value=max_date)
-                
-                media_types = df['media_type'].unique().tolist()
-                selected_media_types = st.multiselect('Select Media Types', media_types, default=media_types)
-                
-                all_hashtags = df['hashtags'].dropna().str.split(',', expand=True).stack().unique().tolist()
-                selected_hashtags = st.multiselect('Select Hashtags', all_hashtags)
-                
-                # AI Model Selection
-                st.header('AI Settings')
-                ai_model = st.selectbox('Select AI Model', options=['distilgpt2', 'gpt2', 'facebook/opt-125m'])
-                ai_max_length = st.slider('Max Length', min_value=50, max_value=500, value=300)
-                ai_temperature = st.slider('Temperature', min_value=0.1, max_value=1.0, value=0.7)
-                ai_top_p = st.slider('Top P', min_value=0.1, max_value=1.0, value=0.9)
-    
-            # Apply Filters
-            filtered_df = df[
-                (df['timestamp'].dt.date >= start_date) &
-                (df['timestamp'].dt.date <= end_date) &
-                (df['media_type'].isin(selected_media_types))
-            ]
+            min_date = df['timestamp'].min().date()
+            max_date = df['timestamp'].max().date()
+            start_date, end_date = st.date_input('Select Date Range', [min_date, max_date], min_value=min_date, max_value=max_date)
             
-            if selected_hashtags:
-                filtered_df = filtered_df[filtered_df['hashtags'].str.contains('|'.join(selected_hashtags), na=False)]
+            media_types = df['media_type'].unique().tolist()
+            selected_media_types = st.multiselect('Select Media Types', media_types, default=media_types)
             
-            st.write(f"Displaying {len(filtered_df)} out of {len(df)} posts based on selected filters.")
+            all_hashtags = df['hashtags'].dropna().str.split(',', expand=True).stack().unique().tolist()
+            selected_hashtags = st.multiselect('Select Hashtags', all_hashtags)
             
-            # Tabs for Organized Layout
-            tabs = st.tabs(["Key Metrics", "Content Calendar", "AI Insights", "Competitor Benchmarking"])
+            # AI Model Selection
+            st.header('AI Settings')
+            ai_model = st.selectbox('Select AI Model', options=['distilgpt2', 'gpt2', 'facebook/opt-125m'])
+            ai_max_length = st.slider('Max Length', min_value=50, max_value=500, value=300)
+            ai_temperature = st.slider('Temperature', min_value=0.1, max_value=1.0, value=0.7)
+            ai_top_p = st.slider('Top P', min_value=0.1, max_value=1.0, value=0.9)
+
+        # Apply Filters
+        filtered_df = df[
+            (df['timestamp'].dt.date >= start_date) &
+            (df['timestamp'].dt.date <= end_date) &
+            (df['media_type'].isin(selected_media_types))
+        ]
+        
+        if selected_hashtags:
+            filtered_df = filtered_df[filtered_df['hashtags'].str.contains('|'.join(selected_hashtags), na=False)]
+        
+        st.write(f"Displaying {len(filtered_df)} out of {len(df)} posts based on selected filters.")
+        
+        # Tabs for Organized Layout
+        tabs = st.tabs(["Key Metrics", "Content Calendar", "AI Insights", "Competitor Benchmarking"])
+        
+        with tabs[0]:
+            st.header('Key Metrics Visualization')
+            col1, col2 = st.columns(2)
+            with col1:
+                fig_reach = plot_reach_over_time(filtered_df)
+                if fig_reach:
+                    st.plotly_chart(fig_reach, use_container_width=True)
+            with col2:
+                fig_engagement = plot_engagement_over_time(filtered_df)
+                if fig_engagement:
+                    st.plotly_chart(fig_engagement, use_container_width=True)
             
-            with tabs[0]:
-                st.header('Key Metrics Visualization')
-                col1, col2 = st.columns(2)
-                with col1:
-                    fig_reach = plot_reach_over_time(filtered_df)
-                    if fig_reach:
-                        st.plotly_chart(fig_reach, use_container_width=True)
-                with col2:
-                    fig_engagement = plot_engagement_over_time(filtered_df)
-                    if fig_engagement:
-                        st.plotly_chart(fig_engagement, use_container_width=True)
-                
-                col3, col4 = st.columns(2)
-                with col3:
-                    fig_top_reach = plot_top_posts(filtered_df, metric='reach')
-                    if fig_top_reach:
-                        st.plotly_chart(fig_top_reach, use_container_width=True)
-                with col4:
-                    fig_top_hashtags = plot_top_hashtags(filtered_df)
-                    if fig_top_hashtags:
-                        st.plotly_chart(fig_top_hashtags, use_container_width=True)
-                
-                st.header('Comprehensive Metrics')
-                comprehensive_figs = plot_comprehensive_metrics(filtered_df)
-                for fig in comprehensive_figs:
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                fig_follower = plot_follower_growth(filtered_df)
-                if fig_follower:
-                    st.plotly_chart(fig_follower, use_container_width=True)
+            col3, col4 = st.columns(2)
+            with col3:
+                fig_top_reach = plot_top_posts(filtered_df, metric='reach')
+                if fig_top_reach:
+                    st.plotly_chart(fig_top_reach, use_container_width=True)
+            with col4:
+                fig_top_hashtags = plot_top_hashtags(filtered_df)
+                if fig_top_hashtags:
+                    st.plotly_chart(fig_top_hashtags, use_container_width=True)
             
-            with tabs[1]:
-                st.header('Content Calendar')
-                display_visual_content_calendar(filtered_df)
+            st.header('Comprehensive Metrics')
+            comprehensive_figs = plot_comprehensive_metrics(filtered_df)
+            for fig in comprehensive_figs:
+                st.plotly_chart(fig, use_container_width=True)
             
-            with tabs[2]:
-                st.header('AI Insights for Selected Post')
-                
-                post_ids = filtered_df['id'].tolist()
-                selected_post_id = st.selectbox('Select a Post ID to Get AI Insights', options=post_ids)
-                
-                selected_post = filtered_df[filtered_df['id'] == selected_post_id].iloc[0]
-                
-                if st.button('Get AI Insight'):
-                    with st.spinner('Generating insights...'):
-                        insight = ai_insight(selected_post, user_id, model=ai_model, max_length=ai_max_length, temperature=ai_temperature, top_p=ai_top_p)
-                        st.subheader('AI Analysis:')
-                        st.write(insight)
+            fig_follower = plot_follower_growth(filtered_df)
+            if fig_follower:
+                st.plotly_chart(fig_follower, use_container_width=True)
+        
+        with tabs[1]:
+            st.header('Content Calendar')
+            display_visual_content_calendar(filtered_df)
+        
+        with tabs[2]:
+            st.header('AI Insights for Selected Post')
             
-            with tabs[3]:
-                compare_performance(filtered_df, st.session_state['access_token'])
+            post_ids = filtered_df['id'].tolist()
+            selected_post_id = st.selectbox('Select a Post ID to Get AI Insights', options=post_ids)
             
-            st.header('Recommendations')
-            recommendations = get_recommendations(filtered_df)
-            for rec in recommendations:
-                st.write(f"- {rec}")
-    
-        if 'access_token' not in st.session_state:
-            st.header('Login with Facebook')
-            authorization_url = get_facebook_auth_url()
-            st.markdown(f'<a href="{authorization_url}">Login with Facebook</a>', unsafe_allow_html=True)
-    
-            query_params = st.experimental_get_query_params()
-            if 'code' in query_params:
-                code = query_params['code'][0]
-                token = get_access_token(code)
-                if token:
-                    long_lived_token, expires_in = exchange_for_long_lived_token(token['access_token'])
-                    if long_lived_token:
-                        st.session_state['access_token'] = long_lived_token
-                        st.session_state['expires_at'] = (datetime.datetime.now() + datetime.timedelta(seconds=expires_in)).isoformat()
-    
-                        save_access_token_to_db(
-                            token=long_lived_token,
-                            expires_at=st.session_state['expires_at'],
-                            user_id=user_id
-                        )
-    
-                        st.experimental_set_query_params()
-                        st.experimental_rerun()
-                    else:
-                        st.session_state['api_errors'].append('Failed to obtain a long-lived access token.')
+            selected_post = filtered_df[filtered_df['id'] == selected_post_id].iloc[0]
+            
+            if st.button('Get AI Insight'):
+                with st.spinner('Generating insights...'):
+                    insight = ai_insight(selected_post, user_id, model=ai_model, max_length=ai_max_length, temperature=ai_temperature, top_p=ai_top_p)
+                    st.subheader('AI Analysis:')
+                    st.write(insight)
+        
+        with tabs[3]:
+            compare_performance(filtered_df, st.session_state['access_token'])
+        
+        st.header('Recommendations')
+        recommendations = get_recommendations(filtered_df)
+        for rec in recommendations:
+            st.write(f"- {rec}")
+
+    if 'access_token' not in st.session_state:
+        st.header('Login with Facebook')
+        authorization_url = get_facebook_auth_url()
+        st.markdown(f'<a href="{authorization_url}">Login with Facebook</a>', unsafe_allow_html=True)
+
+        query_params = st.experimental_get_query_params()
+        if 'code' in query_params:
+            code = query_params['code'][0]
+            token = get_access_token(code)
+            if token:
+                long_lived_token, expires_in = exchange_for_long_lived_token(token['access_token'])
+                if long_lived_token:
+                    st.session_state['access_token'] = long_lived_token
+                    st.session_state['expires_at'] = (datetime.datetime.now() + datetime.timedelta(seconds=expires_in)).isoformat()
+
+                    save_access_token_to_db(
+                        token=long_lived_token,
+                        expires_at=st.session_state['expires_at'],
+                        user_id=user_id
+                    )
+
+                    st.experimental_set_query_params()
+                    st.experimental_rerun()
                 else:
-                    st.session_state['api_errors'].append('Failed to retrieve access token.')
-    
-        if st.session_state['api_errors']:
-            with st.expander("View API Errors"):
-                for error in st.session_state['api_errors']:
-                    st.write(error)
-    
+                    st.session_state['api_errors'].append('Failed to obtain a long-lived access token.')
+            else:
+                st.session_state['api_errors'].append('Failed to retrieve access token.')
+
+    if st.session_state['api_errors']:
+        with st.expander("View API Errors"):
+            for error in st.session_state['api_errors']:
+                st.write(error)
+
     if __name__ == '__main__':
-        main()
+    main()
