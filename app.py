@@ -97,22 +97,34 @@ VALID_METRICS = {
 }
 
 # MongoDB Helper Functions
-def get_mongo_client():
-    return MongoClient(MONGO_CONNECTION_STRING)
+class MongoDBHelper:
+    def __init__(self, connection_string, db_name):
+        self.client = MongoClient(connection_string)
+        self.db = self.client[db_name]
+
+    def get_collection(self, collection_name):
+        return self.db[collection_name]
+
+    def find_one(self, collection_name, query):
+        return self.get_collection(collection_name).find_one(query)
+
+    def update_one(self, collection_name, query, update, upsert=False):
+        return self.get_collection(collection_name).update_one(query, update, upsert=upsert)
+
+    def insert_many(self, collection_name, documents):
+        return self.get_collection(collection_name).insert_many(documents)
+
 
 def get_mongo_collection(collection_name):
     client = get_mongo_client()
     db = client['thefunbadger']  # Replace with your database name
     collection = db[collection_name]  # Dynamic collection name
     return collection
+mongo_helper = MongoDBHelper(MONGO_CONNECTION_STRING, 'thefunbadger')
 
 def save_access_token_to_db(token, expires_at, user_id):
-    collection = get_mongo_collection('auth')
-    collection.update_one(
-        {'user_id': user_id},
-        {'$set': {'token': token, 'expires_at': expires_at}},
-        upsert=True
-    )
+    mongo_helper.update_one('auth', {'user_id': user_id}, {'$set': {'token': token, 'expires_at': expires_at}}, upsert=True)
+
 
 def get_access_token_from_db(user_id):
     collection = get_mongo_collection('auth')
