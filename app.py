@@ -399,11 +399,11 @@ def get_data_from_db(user_id):
 # Function to handle AI Insights using ChatGPT API
 def get_ai_insights(prompt):
     headers = {
-        "Authorization": f"Bearer {st.secrets['OPENAI_API_KEY']}",
+        "Authorization": f"Bearer {st.secrets['OPENAI_API_KEY']}",  # Correctly formatted with "Bearer "
         "Content-Type": "application/json"
     }
     data = {
-        "model": "gpt-4",  # Ensure you have access to this model
+        "model": "gpt-3.5-turbo",  # You can use gpt-3.5-turbo if you want to stick with the free version
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 300,
         "temperature": 0.7
@@ -421,6 +421,7 @@ def get_ai_insights(prompt):
     except Exception as e:
         st.session_state['api_errors'].append({'error': str(e)})
         return "AI Error: An exception occurred."
+
 
 # Competitor Benchmarking Functions
 def get_competitor_data(competitor_account_id, access_token):
