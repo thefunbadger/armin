@@ -448,16 +448,10 @@ def plot_follower_growth(df):
     else:
         st.warning("Follower data is missing or incomplete. Unable to plot follower growth over time.")
         return None
-# Function to calculate engagement rate based on available metrics
-def calculate_engagement_rate(df):
-    if 'likes' in df.columns and 'comments' in df.columns and 'reach' in df.columns:
-        df['engagement_rate'] = (df['likes'] + df['comments']) / df['reach']
-    else:
-        st.warning("Missing data for engagement rate calculation.")
-    return df
+
 
 # Add this after loading and processing the data
-df = calculate_engagement_rate(df)
+
 
 # Updated engagement plot function
 def plot_engagement(df):
@@ -669,7 +663,7 @@ def main():
                         df = get_data_from_db(user_id)
                         if not df.empty:
                             df = calculate_metrics(df)
-                            df = calculate_engagement_rate(df)
+                            df = calculate_engagement_rate(df)  # Correctly placed here
                             st.session_state['df'] = df
                             st.session_state['data_fetched'] = True
                             st.success('Data loaded from database!')
@@ -700,7 +694,7 @@ def main():
                             df = fetch_all_data(access_token, user_instagram_id)
                             if not df.empty:
                                 df = calculate_metrics(df)
-                                df = calculate_engagement_rate(df)
+                                df = calculate_engagement_rate(df)  # Correctly placed here after fetching data
                                 st.session_state['df'] = df
                                 st.session_state['data_fetched'] = True
                                 st.success('Data fetched successfully!')
@@ -713,46 +707,158 @@ def main():
                                 )
                             else:
                                 st.warning("No data available to display.")
+Summary:
+The line df = calculate_engagement_rate(df) should only be placed inside the main data processing flow, not in the global scope.
+This function should be called after calculate_metrics(df) and before displaying the data.
+Make sure to test your app again after these adjustments!
 
+
+
+
+
+
+You said:
+rewrite the full main 
+ChatGPT said:
+ChatGPT
+Here is the rewritten and corrected version of your main() function. I've made sure to place the calculate_engagement_rate(df) correctly and adjusted the data flow to ensure smooth execution.
+
+python
+Copy code
+def main():
+    st.title('Ultimate Instagram Analysis Dashboard')
+
+    # Button to clear cache
+    if st.button("Clear Cache"):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.experimental_rerun()
+
+    # Initialize session states
+    if 'data_fetched' not in st.session_state:
+        st.session_state['data_fetched'] = False
+        st.session_state['df'] = pd.DataFrame()
+    if 'api_errors' not in st.session_state:
+        st.session_state['api_errors'] = []
+    if 'user_id' not in st.session_state:
+        st.session_state['user_id'] = 'default_user'  # Replace with actual user identification
+
+    user_id = st.session_state['user_id']
+
+    # Check for access token in session or MongoDB
+    if 'access_token' not in st.session_state:
+        token_data = get_access_token_from_db(user_id)
+
+        if token_data and token_data[0]:
+            st.session_state['access_token'] = token_data[0]
+            st.session_state['expires_at'] = token_data[1]
+
+            if datetime.datetime.now() > datetime.datetime.fromisoformat(st.session_state['expires_at']):
+                st.error('Access token has expired. Please log in again.')
+                st.session_state.clear()
+                st.experimental_rerun()
+
+    # Authenticate if access token exists
+    if 'access_token' in st.session_state and st.session_state['access_token']:
+        if 'expires_at' in st.session_state:
+            if datetime.datetime.now() > datetime.datetime.fromisoformat(st.session_state['expires_at']):
+                st.error('Access token has expired. Please log in again.')
+                st.session_state.clear()
+                st.experimental_rerun()
+            else:
+                st.success('Successfully Authenticated!')
+
+                # Load data from database or fetch from API
+                if not st.session_state['data_fetched']:
+                    with st.spinner('Loading data from database...'):
+                        df = get_data_from_db(user_id)
+                        if not df.empty:
+                            # Calculate metrics and engagement rate
+                            df = calculate_metrics(df)
+                            df = calculate_engagement_rate(df)
+                            st.session_state['df'] = df
+                            st.session_state['data_fetched'] = True
+                            st.success('Data loaded from database!')
+                        else:
+                            st.info('No cached data found. Please update data to fetch from API.')
+
+                # Update data if necessary
+                if st.button('Update Data') or not st.session_state['data_fetched']:
+                    with st.spinner('Fetching and processing data...'):
+                        pages = get_user_pages(st.session_state['access_token'])
+                        if not pages:
+                            st.error("No Facebook Pages found. Ensure your account manages a page connected to Instagram.")
+                            return
+
+                        instagram_account_id = None
+                        for page in pages:
+                            page_id = page['id']
+                            page_access_token = page['access_token']
+                            instagram_account_id = get_instagram_account_id(page_id, page_access_token)
+                            if instagram_account_id:
+                                st.session_state['instagram_account_id'] = instagram_account_id
+                                st.session_state['page_access_token'] = page_access_token
+                                break
+
+                        # Fetch data if Instagram account is connected
+                        if 'instagram_account_id' in st.session_state:
+                            access_token = st.session_state['page_access_token']
+                            user_instagram_id = st.session_state['instagram_account_id']
+
+                            df = fetch_all_data(access_token, user_instagram_id)
+                            if not df.empty:
+                                # Calculate metrics and engagement rate
+                                df = calculate_metrics(df)
+                                df = calculate_engagement_rate(df)
+                                st.session_state['df'] = df
+                                st.session_state['data_fetched'] = True
+                                st.success('Data fetched successfully!')
+
+                                # Save data and token to MongoDB
+                                save_data_to_db(df, user_id)
+                                save_access_token_to_db(
+                                    token=st.session_state['access_token'],
+                                    expires_at=st.session_state['expires_at'],
+                                    user_id=user_id
+                                )
+                            else:
+                                st.warning("No data available to display.")
+
+    # Check if data is available for visualization
     if not st.session_state['df'].empty:
         df = st.session_state['df']
         
-        # Sidebar Filters
+        # Sidebar filters
         with st.sidebar:
             st.header('Filter Options')
-            
             min_date = df['timestamp'].min().date()
             max_date = df['timestamp'].max().date()
             start_date, end_date = st.date_input('Select Date Range', [min_date, max_date], min_value=min_date, max_value=max_date)
-            
             media_types = df['media_type'].unique().tolist()
             selected_media_types = st.multiselect('Select Media Types', media_types, default=media_types)
-            
             all_hashtags = df['hashtags'].dropna().str.split(',', expand=True).stack().unique().tolist()
             selected_hashtags = st.multiselect('Select Hashtags', all_hashtags)
-            
-            # AI Model Selection
             st.header('AI Settings')
             ai_model = st.selectbox('Select AI Model', options=['distilgpt2', 'gpt2', 'facebook/opt-125m'])
             ai_max_length = st.slider('Max Length', min_value=50, max_value=500, value=300)
             ai_temperature = st.slider('Temperature', min_value=0.1, max_value=1.0, value=0.7)
             ai_top_p = st.slider('Top P', min_value=0.1, max_value=1.0, value=0.9)
 
-        # Apply Filters
+        # Apply filters to data
         filtered_df = df[
-            (df['timestamp'].dt.date >= start_date) &
-            (df['timestamp'].dt.date <= end_date) &
+            (df['timestamp'].dt.date >= start_date) & 
+            (df['timestamp'].dt.date <= end_date) & 
             (df['media_type'].isin(selected_media_types))
         ]
-        
         if selected_hashtags:
             filtered_df = filtered_df[filtered_df['hashtags'].str.contains('|'.join(selected_hashtags), na=False)]
-        
+
         st.write(f"Displaying {len(filtered_df)} out of {len(df)} posts based on selected filters.")
-        
-        # Tabs for Organized Layout
+
+        # Tabs for different features
         tabs = st.tabs(["Key Metrics", "Content Calendar", "AI Insights", "Competitor Benchmarking"])
-        
+
+        # Key Metrics Tab
         with tabs[0]:
             st.header('Key Metrics Visualization')
             col1, col2 = st.columns(2)
@@ -761,9 +867,9 @@ def main():
                 if fig_reach:
                     st.plotly_chart(fig_reach, use_container_width=True)
             with col2:
-                fig_engagement = plot_engagement(filtered_df)  # New function to replace deprecated one
+                fig_engagement = plot_engagement(filtered_df)  # Updated function for engagement
                 if fig_engagement:
-                    st.plotly_chart(fig_engagement, use_container_width=True)            
+                    st.plotly_chart(fig_engagement, use_container_width=True)
             col3, col4 = st.columns(2)
             with col3:
                 fig_top_reach = plot_top_posts(filtered_df, metric='reach')
@@ -773,52 +879,51 @@ def main():
                 fig_top_hashtags = plot_top_hashtags(filtered_df)
                 if fig_top_hashtags:
                     st.plotly_chart(fig_top_hashtags, use_container_width=True)
-            
+
+            # Comprehensive metrics
             st.header('Comprehensive Metrics')
             comprehensive_figs = plot_comprehensive_metrics(filtered_df)
             for fig in comprehensive_figs:
                 st.plotly_chart(fig, use_container_width=True)
-            
+
             fig_follower = plot_follower_growth(filtered_df)
             if fig_follower:
                 st.plotly_chart(fig_follower, use_container_width=True)
-        
+
+        # Content Calendar Tab
         with tabs[1]:
             st.header('Content Calendar')
             display_visual_content_calendar(filtered_df)
-        
+
+        # AI Insights Tab
         with tabs[2]:
             st.header('AI Insights for Selected Post')
-            
             post_ids = filtered_df['id'].tolist()
             selected_post_id = st.selectbox('Select a Post ID to Get AI Insights', options=post_ids)
-            
             selected_post = filtered_df[filtered_df['id'] == selected_post_id].iloc[0]
-            
             if st.button('Get AI Insight'):
                 with st.spinner('Generating insights...'):
                     ai_insight_text = ai_insight(selected_post, user_id, model=ai_model, max_length=ai_max_length, temperature=ai_temperature, top_p=ai_top_p)
                     st.subheader('AI Generated Analysis:')
-                    st.write("---")  # Separation between user and AI input
                     st.markdown(f"**Post Caption**: {selected_post['caption']}")
                     st.markdown(f"**AI Insight**: {ai_insight_text}")
-                    
-                    # Allow user to ask follow-up questions
-                    st.write("---")
                     follow_up_question = st.text_area("Ask a follow-up question about this post (optional):")
                     if st.button('Ask AI'):
                         with st.spinner('Getting response from AI...'):
                             follow_up_response = query_huggingface(f"Q: {follow_up_question}\nA:", model=ai_model)
-                            st.write(f"AI Answer: {follow_up_response[0]['generated_text']}")
-        
+                            st.write(f"AI Answer: {follow_up_response}")
+
+        # Competitor Benchmarking Tab
         with tabs[3]:
             compare_performance(filtered_df, st.session_state['access_token'])
-        
+
+        # Display recommendations
         st.header('Recommendations')
         recommendations = get_recommendations(filtered_df)
         for rec in recommendations:
             st.write(f"- {rec}")
 
+    # If not authenticated, provide Facebook login option
     if 'access_token' not in st.session_state:
         st.header('Login with Facebook')
         authorization_url = get_facebook_auth_url()
