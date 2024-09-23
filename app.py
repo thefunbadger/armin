@@ -598,6 +598,14 @@ def compare_performance(df, access_token):
             st.warning("No competitor data available.")
     else:
         st.info("Enter competitor Instagram Account IDs to compare performance.")
+def calculate_engagement_rate(df):
+    if 'likes' in df.columns and 'comments' in df.columns and 'impressions' in df.columns:
+        # Ensure all are numeric values
+        df['engagement_rate'] = ((df['likes'] + df['comments']) / df['impressions']) * 100
+        df['engagement_rate'].fillna(0, inplace=True)  # Replace NaN with 0 where impressions are missing
+    else:
+        st.warning("Missing columns to calculate engagement rate.")
+    return df
 
 # Visual Content Calendar (New Feature)
 def display_visual_content_calendar(df):
