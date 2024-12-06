@@ -160,7 +160,7 @@ def fetch_instagram_data(access_token, instagram_account_id, retries=3):
 # Facebook OAuth2 Login Function
 def login_with_facebook():
     try:
-        oauth = OAuth2Session(client_id=CLIENT_ID, redirect_uri=REDIRECT_URI)
+        oauth = OAuth2Session(client_id=CLIENT_ID, redirect_uri=REDIRECT_URI, scope=SCOPES)
         authorization_url, state = oauth.authorization_url('https://www.facebook.com/dialog/oauth')
         st.session_state['oauth_state'] = state
         st.markdown(f'<a href="{authorization_url}">Login with Facebook</a>', unsafe_allow_html=True)
@@ -190,8 +190,11 @@ def login_with_facebook():
                     st.session_state['api_errors'].append('Failed to obtain a long-lived access token.')
             else:
                 st.session_state['api_errors'].append('Failed to retrieve access token.')
+    except requests.exceptions.RequestException as e:
+        st.error(f"An error occurred with the Facebook login: {e}")
     except Exception as e:
         st.error(f"Error during Facebook login: {e}")
+
 
 # Token exchange for long-lived token
 def exchange_for_long_lived_token(short_lived_token):
