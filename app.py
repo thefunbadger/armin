@@ -130,6 +130,58 @@ def fetch_instagram_data(access_token, instagram_account_id):
     df = pd.DataFrame(all_data)
     return df
 
+# Facebook OAuth2 Login Function
+def login_with_facebook():
+    oauth = OAuth2Session(client_id=CLIENT_ID, redirect_uri=REDIRECT_URI)
+    authorization_url, state = oauth.authorization_url('https://www.facebook.com/dialog/oauth')
+    st.session_state['oauth_state'] = state
+    st.markdown(f'<a href="{authorization_url}">Login with Facebook</a>', unsafe_allow_html=True)
+
+    # Handle Redirect after Facebook OAuth
+    query_params = st.experimental_get_query_params()
+    if 'code' in query_params:
+        code = query_params['code'][0]
+        token = get_access_token(code)
+        if token:
+            long_lived_token, expires_in = exchange_for_long_lived_token(token['access_token'])
+            if long_lived_token:
+                st.session_state['access_token'] = long_lived_token
+                st.session_state['expires_at'] = (datetime.datetime.now() + datetime.timedelta(seconds=expires_in)).isoformat()
+
+                # Save the token to MongoDB
+                save_access_token_to_db(
+                    token=long_lived_token,
+                    expires_at=st.session_state['expires_at'],
+                    user_id=st.session_state['user_id']
+                )
+
+                # Remove code from the URL
+                st.experimental_set_query_params()  # Clears query params like 'code'
+                st.experimental_rerun()  # Refresh the app to clean the URL
+            else:
+                st.session_state['api_errors'].append('Failed to obtain a long-lived access token.')
+        else:
+            st.session_state['api_errors'].append('Failed to retrieve access token.')
+
+# Token exchange for long-lived token
+def exchange_for_long_lived_token(short_lived_token):
+    url = (
+        "https://graph.facebook.com/oauth/access_token"
+        f"?grant_type=fb_exchange_token"
+        f"&client_id={CLIENT_ID}"
+        f"&client_secret={CLIENT_SECRET}"
+        f"&fb_exchange_token={short_lived_token}"
+    )
+    
+    response = requests.get(url).json()
+
+    if 'access_token' in response:
+        expires_in = response.get('expires_in', 5184000)  # Default to 60 days
+        return response['access_token'], expires_in
+    else:
+        st.session_state['api_errors'].append(response.get('error', 'Unknown error'))
+        return None, None
+
 # Main Function
 def main():
     if 'authenticated' not in st.session_state or not st.session_state['authenticated']:
