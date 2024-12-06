@@ -2,131 +2,178 @@ import streamlit as st
 import requests
 import pandas as pd
 import datetime
-from datetime import timezone
-from requests_oauthlib import OAuth2Session
-from pymongo import MongoClient
-from dotenv import load_dotenv
-import plotly.express as px
 import time
 import random
 import os
+from requests_oauthlib import OAuth2Session
+from pymongo import MongoClient
+import plotly.express as px
+from dotenv import load_dotenv
+import warnings
 
 # Load environment variables
 load_dotenv()
 
-# Streamlit page config
-st.set_page_config(page_title="Instagram Analysis Dashboard", layout="wide")
+# Suppress warnings for cleaner output
+warnings.filterwarnings('ignore')
 
-# Constants
-SCOPES = ['email', 'public_profile', 'pages_show_list', 'instagram_basic', 'instagram_manage_insights']
-HF_API_URL = "https://api-inference.huggingface.co/models/distilgpt2"
-VALID_METRICS = {
-    'IMAGE': ['impressions', 'reach', 'saved', 'likes', 'comments'],
-    'VIDEO': ['plays', 'video_views', 'reach', 'likes', 'comments', 'saved'],
-    'REELS': ['plays', 'video_views', 'reach', 'likes', 'comments', 'saved']
-}
+# Load sensitive information from environment variables
+CLIENT_ID = st.secrets["CLIENT_ID"] if st.secrets else os.getenv('CLIENT_ID')
+CLIENT_SECRET = st.secrets["CLIENT_SECRET"] if st.secrets else os.getenv('CLIENT_SECRET')
+REDIRECT_URI = st.secrets["REDIRECT_URI"] if st.secrets else os.getenv('REDIRECT_URI')
+MONGO_CONNECTION_STRING = st.secrets["MONGO_CONNECTION_STRING"] if st.secrets else os.getenv('MONGO_CONNECTION_STRING')
+HF_API_TOKEN = st.secrets["HF_API_TOKEN"] if st.secrets else os.getenv('HF_API_TOKEN')
 
-# Load sensitive data
-CLIENT_ID = os.getenv('CLIENT_ID')
-CLIENT_SECRET = os.getenv('CLIENT_SECRET')
-REDIRECT_URI = os.getenv('REDIRECT_URI')
-MONGO_URI = os.getenv('MONGO_CONNECTION_STRING')
-HF_API_TOKEN = os.getenv('HF_API_TOKEN')
-MELIPAYAMAK_USERNAME = os.getenv('MELIPAYAMAK_USERNAME')
-MELIPAYAMAK_PASSWORD = os.getenv('MELIPAYAMAK_PASSWORD')
+# Ensure all required environment variables are set
+required_env_vars = ['CLIENT_ID', 'CLIENT_SECRET', 'REDIRECT_URI', 'MONGO_CONNECTION_STRING', 'HF_API_TOKEN']
+missing_vars = [var for var in required_env_vars if not (st.secrets.get(var) or os.getenv(var))]
+if missing_vars:
+    st.error(f"Missing environment variables: {', '.join(missing_vars)}. Please set them before running the app.")
+    st.stop()
 
-# MongoDB connection setup
-@st.cache_resource
-def get_mongo_client() -> MongoClient:
-    return MongoClient(MONGO_URI)
+# MongoDB Helper Functions
+def get_mongo_client():
+    return MongoClient(MONGO_CONNECTION_STRING)
 
-@st.cache_resource
-def get_mongo_collection(collection_name: str):
+def get_mongo_collection(collection_name):
     client = get_mongo_client()
-    db = client['thefunbadger']
-    return db[collection_name]
+    db = client['thefunbadger']  # Replace with your database name
+    collection = db[collection_name]  # Dynamic collection name
+    return collection
 
-# Token management
-def get_access_token(user_id: str):
+def save_access_token_to_db(token, expires_at, user_id):
     collection = get_mongo_collection('auth')
-    data = collection.find_one({'user_id': user_id})
-    if data and datetime.datetime.now() < datetime.datetime.fromisoformat(data['expires_at']):
-        return data['token']
-    return None
+    collection.update_one(
+        {'user_id': user_id},
+        {'$set': {'token': token, 'expires_at': expires_at}},
+        upsert=True
+    )
 
-def save_access_token(user_id: str, token: str, expires_at: str):
+def get_access_token_from_db(user_id):
     collection = get_mongo_collection('auth')
-    collection.update_one({'user_id': user_id}, {'$set': {'token': token, 'expires_at': expires_at}}, upsert=True)
+    try:
+        data = collection.find_one({'user_id': user_id})
+        if data:
+            token, expires_at = data['token'], data['expires_at']
+            if datetime.datetime.now() > datetime.datetime.fromisoformat(expires_at):
+                st.error("Token has expired. Please log in again.")
+                return None, None
+            return token, expires_at
+        else:
+            st.warning("No access token found in the database.")
+            return None, None
+    except Exception as e:
+        st.error(f"Error fetching access token from MongoDB: {e}")
+        return None, None
 
-# OTP management
-def generate_otp() -> int:
-    return random.randint(100000, 999999)
+# Data Export Functionality (CSV & Excel)
+def export_data(df):
+    csv = df.to_csv(index=False)
+    excel = df.to_excel(index=False)
+    
+    st.download_button(
+        label="Download CSV",
+        data=csv,
+        file_name="instagram_data.csv",
+        mime="text/csv"
+    )
+    
+    st.download_button(
+        label="Download Excel",
+        data=excel,
+        file_name="instagram_data.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
-def send_otp(phone_number: str, otp: int) -> bool:
-    payload = {
-        'username': MELIPAYAMAK_USERNAME,
-        'password': MELIPAYAMAK_PASSWORD,
-        'to': phone_number,
-        'from': "50004001654470",
-        'text': f'Your OTP is {otp}',
-        'isflash': False
-    }
-    response = requests.post("https://rest.payamak-panel.com/api/SendSMS/SendSMS", data=payload)
-    return response.status_code == 200
+# Function to fetch Instagram data
+def fetch_instagram_data(access_token, instagram_account_id):
+    media_items = get_media(access_token, instagram_account_id)
+    
+    if not media_items:
+        st.warning("No media items retrieved. Ensure your Instagram account has posts and the necessary permissions.")
+        return pd.DataFrame()  # Return an empty DataFrame if no media is found
 
-def validate_otp(phone_number: str, otp: int) -> bool:
-    collection = get_mongo_collection('otps')
-    otp_entry = collection.find_one({'phone_number': phone_number})
-    if otp_entry and otp_entry['otp'] == otp and time.time() - otp_entry['created_at'] <= 300:
-        return True
-    return False
+    all_data = []
+    for item in media_items:
+        media_id = item['id']
+        media_type = item['media_type']
 
-# Data fetching
-@st.cache_data
-def fetch_media_data(access_token: str, instagram_account_id: str) -> pd.DataFrame:
-    media = []
-    url = f"https://graph.facebook.com/v20.0/{instagram_account_id}/media?fields=id,caption,timestamp,media_type,media_url&access_token={access_token}"
-    while url:
-        response = requests.get(url).json()
-        media.extend(response.get('data', []))
-        url = response.get('paging', {}).get('next', None)
-    return pd.DataFrame(media)
+        insights = get_media_insights(access_token, media_id, media_type)
+        data = {
+            'id': media_id,
+            'caption': item.get('caption', ''),
+            'timestamp': item['timestamp'],
+            'media_type': media_type,
+            'media_url': item.get('media_url', ''),
+            'permalink': item['permalink'],
+            'impressions': None,
+            'reach': None,
+            'saved': None,
+            'likes': None,
+            'comments': None,
+            'plays': None,
+            'clips_replays_count': None,
+            'ig_reels_video_view_total_time': None,
+            'ig_reels_avg_watch_time': None,
+            'video_views': None,
+            'hashtags': extract_hashtags(item.get('caption', '')),
+            'followers': None
+        }
 
-@st.cache_data
-def fetch_insights(access_token: str, media_id: str, media_type: str):
-    metrics = VALID_METRICS.get(media_type, [])
-    if not metrics:
-        return {}
-    url = f"https://graph.facebook.com/v20.0/{media_id}/insights?metric={','.join(metrics)}&access_token={access_token}"
-    response = requests.get(url).json()
-    return {insight['name']: insight['values'][0]['value'] for insight in response.get('data', [])}
+        for insight in insights:
+            metric_name = insight.get('name')
+            if metric_name in data:
+                data[metric_name] = insight['values'][0]['value']
 
-# Main application
+        all_data.append(data)
+
+    df = pd.DataFrame(all_data)
+    return df
+
+# Main Function
 def main():
-    st.title("Instagram Analysis Dashboard")
-    
-    # User authentication
-    user_id = st.session_state.get("user_id", "default_user")
-    access_token = get_access_token(user_id)
-    if not access_token:
-        st.write("Please authenticate to access the dashboard.")
-        return
+    if 'authenticated' not in st.session_state or not st.session_state['authenticated']:
+        login_with_facebook()
+    else:
+        st.title('Ultimate Instagram Analysis Dashboard')
 
-    # Fetch data
-    instagram_account_id = "123456789"  # Replace with dynamic retrieval logic
-    media_df = fetch_media_data(access_token, instagram_account_id)
-    if media_df.empty:
-        st.warning("No media found for your account.")
-        return
-    
-    # Display data
-    st.dataframe(media_df)
+        if st.button("Clear Cache"):
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.experimental_rerun()
 
-    # Insights generation
-    selected_media_id = st.selectbox("Select Media ID", media_df['id'].tolist())
-    if st.button("Generate Insights"):
-        insights = fetch_insights(access_token, selected_media_id, media_df.loc[media_df['id'] == selected_media_id, 'media_type'].values[0])
-        st.json(insights)
+        if 'data_fetched' not in st.session_state:
+            st.session_state['data_fetched'] = False
+            st.session_state['df'] = pd.DataFrame()
 
-if __name__ == "__main__":
+        user_id = st.session_state['user_id']
+
+        # Token check and retrieval
+        if 'access_token' not in st.session_state:
+            token_data = get_access_token_from_db(user_id)
+
+            if token_data and token_data[0]:
+                st.session_state['access_token'] = token_data[0]
+                st.session_state['expires_at'] = token_data[1]
+
+                if datetime.datetime.now() > datetime.datetime.fromisoformat(st.session_state['expires_at']):
+                    st.error('Access token has expired. Please log in again.')
+                    st.session_state.clear()
+                    st.experimental_rerun()
+
+        if 'access_token' in st.session_state:
+            access_token = st.session_state['access_token']
+            if 'data_fetched' not in st.session_state or not st.session_state['data_fetched']:
+                st.session_state['df'] = fetch_instagram_data(access_token, st.session_state['instagram_account_id'])
+                st.session_state['data_fetched'] = True
+
+            df = st.session_state['df']
+            if not df.empty:
+                export_data(df)  # Allow export of the data
+                plot_reach_over_time(df)
+                plot_engagement_over_time(df)
+                plot_top_posts(df)
+
+# Run the app
+if __name__ == '__main__':
     main()
