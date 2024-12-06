@@ -2,14 +2,14 @@ import streamlit as st
 import requests
 import pandas as pd
 import datetime
-import time
-import random
 import os
 from requests_oauthlib import OAuth2Session
 from pymongo import MongoClient
 import plotly.express as px
 from dotenv import load_dotenv
 import warnings
+import time
+import threading
 
 # Load environment variables
 load_dotenv()
@@ -46,7 +46,7 @@ def get_mongo_collection(collection_name):
         collection = db[collection_name]
         return collection
     except Exception as e:
-        st.error(f"Error accessing collection: {e}")
+        st.error(f"Error accessing MongoDB collection: {e}")
         st.stop()
 
 def save_access_token_to_db(token, expires_at, user_id):
@@ -59,7 +59,6 @@ def save_access_token_to_db(token, expires_at, user_id):
         )
     except Exception as e:
         st.error(f"Error saving access token to MongoDB: {e}")
-        st.stop()
 
 def get_access_token_from_db(user_id):
     try:
@@ -78,7 +77,7 @@ def get_access_token_from_db(user_id):
         st.error(f"Error fetching access token from MongoDB: {e}")
         return None, None
 
-# Data Export Functionality (CSV & Excel)
+# Function to export data (CSV & Excel)
 def export_data(df):
     try:
         csv = df.to_csv(index=False)
@@ -100,51 +99,60 @@ def export_data(df):
     except Exception as e:
         st.error(f"Error exporting data: {e}")
 
-# Function to fetch Instagram data
-def fetch_instagram_data(access_token, instagram_account_id):
+# Function to fetch Instagram data with retries, pagination, and error handling
+def fetch_instagram_data(access_token, instagram_account_id, retries=3):
     try:
         media_items = get_media(access_token, instagram_account_id)
-        
+        all_data = []
+
         if not media_items:
             st.warning("No media items retrieved. Ensure your Instagram account has posts and the necessary permissions.")
-            return pd.DataFrame()  # Return an empty DataFrame if no media is found
+            return pd.DataFrame()
 
-        all_data = []
-        for item in media_items:
-            media_id = item['id']
-            media_type = item['media_type']
+        # Pagination logic to fetch all media items
+        while media_items:
+            for item in media_items:
+                media_id = item['id']
+                media_type = item['media_type']
+                insights = get_media_insights(access_token, media_id, media_type)
+                data = {
+                    'id': media_id,
+                    'caption': item.get('caption', ''),
+                    'timestamp': item['timestamp'],
+                    'media_type': media_type,
+                    'media_url': item.get('media_url', ''),
+                    'permalink': item['permalink'],
+                    'impressions': None,
+                    'reach': None,
+                    'saved': None,
+                    'likes': None,
+                    'comments': None,
+                    'plays': None,
+                    'clips_replays_count': None,
+                    'ig_reels_video_view_total_time': None,
+                    'ig_reels_avg_watch_time': None,
+                    'video_views': None,
+                    'hashtags': extract_hashtags(item.get('caption', '')),
+                    'followers': None
+                }
 
-            insights = get_media_insights(access_token, media_id, media_type)
-            data = {
-                'id': media_id,
-                'caption': item.get('caption', ''),
-                'timestamp': item['timestamp'],
-                'media_type': media_type,
-                'media_url': item.get('media_url', ''),
-                'permalink': item['permalink'],
-                'impressions': None,
-                'reach': None,
-                'saved': None,
-                'likes': None,
-                'comments': None,
-                'plays': None,
-                'clips_replays_count': None,
-                'ig_reels_video_view_total_time': None,
-                'ig_reels_avg_watch_time': None,
-                'video_views': None,
-                'hashtags': extract_hashtags(item.get('caption', '')),
-                'followers': None
-            }
+                for insight in insights:
+                    metric_name = insight.get('name')
+                    if metric_name in data:
+                        data[metric_name] = insight['values'][0]['value']
 
-            for insight in insights:
-                metric_name = insight.get('name')
-                if metric_name in data:
-                    data[metric_name] = insight['values'][0]['value']
+                all_data.append(data)
 
-            all_data.append(data)
+            # Check if there's more data to fetch
+            next_url = media_items.get('paging', {}).get('next')
+            if next_url:
+                media_items = requests.get(next_url).json().get('data', [])
+            else:
+                break
 
         df = pd.DataFrame(all_data)
         return df
+
     except Exception as e:
         st.error(f"Error fetching Instagram data: {e}")
         return pd.DataFrame()
