@@ -3,11 +3,14 @@ import requests
 import pandas as pd
 import datetime
 import os
+import plotly.express as px
 from requests_oauthlib import OAuth2Session
 from pymongo import MongoClient
-import plotly.express as px
 from dotenv import load_dotenv
-import warnings
+import time
+import random
+import threading
+import json
 
 # Load environment variables
 load_dotenv()
@@ -214,26 +217,41 @@ def exchange_for_long_lived_token(short_lived_token):
         st.error(f"Error exchanging short-lived token: {e}")
         return None, None
 
-# Main Function
+# Helper function to extract hashtags from captions
+def extract_hashtags(caption):
+    return [tag for tag in caption.split() if tag.startswith("#")]
+
+# Data Analysis and Visualization Functions
+def plot_reach_over_time(df):
+    if 'reach' in df.columns:
+        fig = px.line(df, x='timestamp', y='reach', title='Reach Over Time')
+        st.plotly_chart(fig)
+
+def plot_engagement_over_time(df):
+    if 'engagement_rate' in df.columns:
+        fig = px.line(df, x='timestamp', y='engagement_rate', title='Engagement Over Time')
+        st.plotly_chart(fig)
+
+def plot_top_posts(df, metric='reach', top_n=5):
+    top_posts = df.nlargest(top_n, metric)
+    fig = px.bar(top_posts, x='id', y=metric, title=f'Top {top_n} Posts by {metric}')
+    st.plotly_chart(fig)
+
+# Main Application Function
 def main():
     try:
         if 'authenticated' not in st.session_state or not st.session_state['authenticated']:
             login_with_facebook()
         else:
-            st.title('Ultimate Instagram Analysis Dashboard')
+            st.title('Instagram Insights Dashboard')
 
             if st.button("Clear Cache"):
                 st.cache_data.clear()
                 st.cache_resource.clear()
                 st.experimental_rerun()
 
-            if 'data_fetched' not in st.session_state:
-                st.session_state['data_fetched'] = False
-                st.session_state['df'] = pd.DataFrame()
-
             user_id = st.session_state['user_id']
 
-            # Token check and retrieval
             if 'access_token' not in st.session_state:
                 token_data = get_access_token_from_db(user_id)
 
