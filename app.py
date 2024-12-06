@@ -8,8 +8,6 @@ from pymongo import MongoClient
 import plotly.express as px
 from dotenv import load_dotenv
 import warnings
-import time
-import threading
 
 # Load environment variables
 load_dotenv()
@@ -77,7 +75,7 @@ def get_access_token_from_db(user_id):
         st.error(f"Error fetching access token from MongoDB: {e}")
         return None, None
 
-# Function to export data (CSV & Excel)
+# Data Export Functionality (CSV & Excel)
 def export_data(df):
     try:
         csv = df.to_csv(index=False)
@@ -190,11 +188,8 @@ def login_with_facebook():
                     st.session_state['api_errors'].append('Failed to obtain a long-lived access token.')
             else:
                 st.session_state['api_errors'].append('Failed to retrieve access token.')
-    except requests.exceptions.RequestException as e:
-        st.error(f"An error occurred with the Facebook login: {e}")
     except Exception as e:
         st.error(f"Error during Facebook login: {e}")
-
 
 # Token exchange for long-lived token
 def exchange_for_long_lived_token(short_lived_token):
