@@ -24,6 +24,14 @@ CLIENT_SECRET = st.secrets["CLIENT_SECRET"] if st.secrets else os.getenv('CLIENT
 REDIRECT_URI = st.secrets["REDIRECT_URI"] if st.secrets else os.getenv('REDIRECT_URI')
 MONGO_CONNECTION_STRING = st.secrets["MONGO_CONNECTION_STRING"] if st.secrets else os.getenv('MONGO_CONNECTION_STRING')
 HF_API_TOKEN = st.secrets["HF_API_TOKEN"] if st.secrets else os.getenv('HF_API_TOKEN')
+# Define OAuth2 scopes for Facebook and Instagram
+SCOPES = [
+    'email',                      # Optional, if you need email access
+    'public_profile',             # Required for basic profile access
+    'pages_show_list',            # To get the list of pages the user manages
+    'instagram_basic',            # Required to access Instagram profile info
+    'instagram_manage_insights'   # Required to fetch Instagram media insights
+]
 
 # Ensure all required environment variables are set
 required_env_vars = ['CLIENT_ID', 'CLIENT_SECRET', 'REDIRECT_URI', 'MONGO_CONNECTION_STRING', 'HF_API_TOKEN']
